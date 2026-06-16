@@ -3,34 +3,35 @@ package build.kymora.vfs
 import mill.*, scalalib.*, scalajslib.*, scalanativelib.*
 
 trait VfsModule extends _root_.build.CommonScalaModule
-    with PlatformScalaModule
+    with _root_.build.KymoraPlatformScalaModule
     with _root_.build.PublishSupport {
 
     override def artifactName = "kymora-vfs"
 
     def mvnDeps = Seq(
+        mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
         mvn"com.outr::scribe::${_root_.build.KymoraVersions.Scribe}"
     )
 }
 
-trait VfsTestModule extends _root_.build.CommonScalaTestModule {
+trait VfsJSModule extends VfsModule with _root_.build.CommonScalaJSModule {
 
-    override def sources = Task.Sources(
-        moduleDir / os.up / "test" / "src"
-    )
+    override def moduleKind: T[mill.scalajslib.api.ModuleKind] = Task {
+        mill.scalajslib.api.ModuleKind.CommonJSModule
+    }
 }
 
 object jvm extends VfsModule {
     override def moduleDeps = Seq(build.kymora.core.jvm)
-    object test extends ScalaTests with VfsTestModule with _root_.build.KyoTestModule
+    object test extends ScalaTests with _root_.build.KyoTestModule
 }
 
-object js extends VfsModule with _root_.build.CommonScalaJSModule {
+object js extends VfsJSModule {
     override def moduleDeps = Seq(build.kymora.core.js)
-    object test extends ScalaJSTests with VfsTestModule with _root_.build.KyoTestJSModule
+    object test extends ScalaJSTests with _root_.build.KyoTestJSModule
 }
 
 object native extends VfsModule with _root_.build.CommonScalaNativeModule {
     override def moduleDeps = Seq(build.kymora.core.native)
-    object test extends ScalaNativeTests with VfsTestModule with _root_.build.KyoTestNativeModule
+    object test extends ScalaNativeTests with _root_.build.KyoTestNativeModule
 }
