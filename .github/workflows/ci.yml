@@ -36,8 +36,18 @@ jobs:
         run: ./mill kymora.core.jvm.checkFormat + kymora.vfs.jvm.checkFormat
 
   build:
-    name: Build & Test (JVM)
-    runs-on: ubuntu-latest
+    name: Build & Test (JVM / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `./mill` is a POSIX launcher that refuses to run on Windows; the
+          # bundled `mill.bat` is the Windows entry point.
+          - os: ubuntu-latest
+            mill: "./mill"
+          - os: windows-latest
+            mill: "./mill.bat"
     steps:
       - uses: actions/checkout@v4
 
@@ -50,10 +60,10 @@ jobs:
         uses: ./.github/actions/setup-mill-caches
 
       - name: Compile JVM modules
-        run: ./mill kymora.core.jvm.compile + kymora.vfs.jvm.compile
+        run: ${{ matrix.mill }} kymora.core.jvm.compile + kymora.vfs.jvm.compile
 
       - name: Run JVM tests
-        run: ./mill kymora.core.jvm.test + kymora.vfs.jvm.test
+        run: ${{ matrix.mill }} kymora.core.jvm.test + kymora.vfs.jvm.test
 
   build-js:
     name: Build & Test (Scala.js)

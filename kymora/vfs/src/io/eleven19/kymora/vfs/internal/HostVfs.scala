@@ -10,6 +10,23 @@ private[vfs] object HostVfs:
 
     def init(root: Path)(using Frame): Vfs < Sync =
         Sync.defer(new HostVfs(root))
+
+    /** Appends host path `segments` to `base`, preserving the OS path root.
+      *
+      * WORKAROUND: `kyo.Path`'s `/` operator (and `Path.apply`/`parts`) model paths as a driveless segment list, so on
+      * Windows the drive letter is dropped and the rebuilt path re-anchors to the process working directory's drive
+      * (e.g. `Path("C:/x") / "y"` renders as `D:/x/y` when the CWD is on `D:`). That corrupts every host path the VFS
+      * derives from its root once the root and CWD live on different drives. Rebuilding from the rendered string keeps
+      * the drive intact and is a no-op on POSIX.
+      *
+      * Upstream bug: getkyo/kyo#1678. Remove once it lands — tracked by Eleven19/kymora#3.
+      */
+    private[vfs] def resolve(base: Path, segments: String*): Path =
+        if segments.isEmpty then base
+        else
+            val prefix = base.toString
+            val sep    = if prefix.endsWith("/") then "" else "/"
+            Path(s"$prefix$sep${segments.mkString("/")}")
 end HostVfs
 
 final private class HostVfs(root: Path)(using Frame) extends Vfs:
@@ -491,7 +508,7 @@ final private class HostVfs(root: Path)(using Frame) extends Vfs:
                         val childTarget = target / name
                         for
                             confinedChild <- confinedHostPath(child, childSource, "copy")
-                            targetChild = targetPath / name
+                            targetChild = HostVfs.resolve(targetPath, name)
                             _ <- copyHost(childSource, confinedChild, childTarget, targetChild, replaceExisting)
                         yield ()
                     case Absent =>
@@ -500,7 +517,7 @@ final private class HostVfs(root: Path)(using Frame) extends Vfs:
         yield ()
 
     private def hostPath(path: VPath): Path =
-        absolute(path).parts.foldLeft(root)((current, part) => current / part)
+        HostVfs.resolve(root, absolute(path).parts.toSeq*)
 
     private def absolute(path: VPath): VPath =
         if path.isAbsolute then path else VPath.root.resolve(path)

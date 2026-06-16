@@ -1,0 +1,10 @@
+# Normalize line endings. Source files are checked out as LF on every platform
+# so JVM source-position macros (e.g. Kyo's `Frame` / kyo-test `assert`) don't
+# miscount offsets on CRLF and crash with StringIndexOutOfBoundsException.
+# Without this, GitHub's Windows runners (core.autocrlf=true) check out CRLF and
+# the test compile fails. See getkyo/kyo#1678 thread / Eleven19/kymora#3.
+* text=auto eol=lf
+
+# Windows batch launcher must keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
