@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags-ignore:
+      - "v*"
+    paths-ignore:
+      - ".github/CODEOWNERS"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - ".github/CODEOWNERS"
+
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Check formatting
+        run: ./mill kymora.core.jvm.checkFormat + kymora.vfs.jvm.checkFormat
+
+  build:
+    name: Build & Test (JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Compile JVM modules
+        run: ./mill kymora.core.jvm.compile + kymora.vfs.jvm.compile
+
+      - name: Run JVM tests
+        run: ./mill kymora.core.jvm.test + kymora.vfs.jvm.test
+
+  build-js:
+    name: Build & Test (Scala.js)
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Compile JS modules
+        run: ./mill kymora.core.js.compile + kymora.vfs.js.compile
+
+      - name: Run JS tests
+        run: ./mill kymora.core.js.test + kymora.vfs.js.test
+
+  build-native:
+    name: Build & Test (Scala Native)
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Install Scala Native toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libunwind-dev libgc-dev
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Compile Native modules
+        run: ./mill kymora.core.native.compile + kymora.vfs.native.compile
+
+      - name: Run Native tests
+        run: ./mill kymora.core.native.test + kymora.vfs.native.test

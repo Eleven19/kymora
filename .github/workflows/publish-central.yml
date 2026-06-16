@@ -1,0 +1,59 @@
+name: Publish Maven Central
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.0) — omit the leading v"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+      release_name: ${{ steps.metadata.outputs.release_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: metadata
+        uses: ./.github/actions/release-metadata
+        with:
+          version: ${{ inputs.version || '' }}
+
+  publish:
+    needs: metadata
+    runs-on: ubuntu-latest
+    env:
+      SONATYPE_USERNAME: ${{ secrets.ELEVEN19_SONATYPE_USERNAME }}
+      SONATYPE_PASSWORD: ${{ secrets.ELEVEN19_SONATYPE_PASSWORD }}
+      PGP_SECRET: ${{ secrets.ELEVEN19_IO_PGP_SECRET_BASE64 }}
+      PGP_PASSPHRASE: ${{ secrets.ELEVEN19_IO_PGP_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Install Scala Native toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libunwind-dev libgc-dev
+
+      - name: Publish to Maven Central
+        shell: bash
+        run: scripts/ci/publish-central.sh "${{ needs.metadata.outputs.version }}"

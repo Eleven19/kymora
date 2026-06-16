@@ -1,0 +1,41 @@
+[changelog]
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {{ commit.message | split(pat="\n") | first | upper_first }}
+{% endfor %}
+
+{% endfor %}
+"""
+footer = ""
+trim = true
+render_always = true
+
+[git]
+conventional_commits = false
+filter_unconventional = false
+require_conventional = false
+split_commits = false
+protect_breaking_commits = false
+filter_commits = true
+fail_on_unmatched_commit = false
+topo_order = false
+topo_order_commits = true
+sort_commits = "oldest"
+
+commit_preprocessors = [
+  { pattern = " \\(#\\d+\\)\n", replace = "\n" },
+  { pattern = " \\(#\\d+\\)$", replace = "" },
+]
+
+commit_parsers = [
+  { message = "^(?i)(docs?|readme|guide|design|document)\\b", group = "Documentation" },
+  { message = "^(?i)(add|implement).*(workflow|release|ci|codeowners|beads|copilot|claude|cursor|codex)\\b", group = "CI" },
+  { message = "^(?i)(chore|ci|build|test)\\b", group = "CI" },
+  { message = "^(?i)(fix|bug|repair|correct)\\b", group = "Fixed" },
+  { message = "^(?i)(add|implement|feat|feature)\\b", group = "Added" },
+  { message = "^(?i)(change|update|refactor|switch|improve|rename)\\b", group = "Changed" },
+  { message = ".*", group = "Changed" },
+]

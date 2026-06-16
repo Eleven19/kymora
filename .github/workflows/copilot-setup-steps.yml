@@ -1,0 +1,46 @@
+# GitHub Copilot coding agent — environment bootstrap
+#
+# This workflow is picked up by Copilot coding agent (job name MUST be `copilot-setup-steps`).
+# Steps run before the agent's session; downloads here are not subject to the agent firewall.
+# The file must exist on the default branch to apply. See:
+# https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
+#
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK (match CI)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Node (match CI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Scala Native toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libunwind-dev libgc-dev
+
+      - name: Compile all modules (Mill + Coursier cache)
+        run: ./mill __.compile

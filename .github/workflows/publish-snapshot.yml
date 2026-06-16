@@ -1,0 +1,53 @@
+name: Publish SNAPSHOT
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or commit to publish from (defaults to the workflow's ref)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish SNAPSHOT
+    runs-on: ubuntu-latest
+    env:
+      SONATYPE_USERNAME: ${{ secrets.ELEVEN19_SONATYPE_USERNAME }}
+      SONATYPE_PASSWORD: ${{ secrets.ELEVEN19_SONATYPE_PASSWORD }}
+      PGP_SECRET: ${{ secrets.ELEVEN19_IO_PGP_SECRET_BASE64 }}
+      PGP_PASSPHRASE: ${{ secrets.ELEVEN19_IO_PGP_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Install Scala Native toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libunwind-dev libgc-dev
+
+      - name: Compute publish version
+        id: version
+        shell: bash
+        run: |
+          base_version="$(cat VERSION | tr -d '[:space:]')"
+          version="$(scripts/ci/compute-publish-version.sh "$base_version")"
+          echo "publish_version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: $version"
+
+      - name: Publish SNAPSHOT to Maven Central
+        if: env.SONATYPE_USERNAME != ''
+        shell: bash
+        run: scripts/ci/publish-central.sh "${{ steps.version.outputs.publish_version }}"

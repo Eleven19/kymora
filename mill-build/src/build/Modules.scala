@@ -40,8 +40,50 @@ trait CommonScalaModule extends ScalaModule with scalafmt.ScalafmtModule {
 
 trait CommonScalaTestModule extends ScalaModule with scalafmt.ScalafmtModule
 
+/** kyo-test wiring for Mill.
+  *
+  * Kyo ships no Mill integration, so we declare the `sbt.testing.Framework`
+  * class names and the kyo-test dependencies here. `kyo-test-api` provides the
+  * `kyo.test.Test` suite API; `kyo-test-runner` provides the platform
+  * `Framework` implementations referenced below.
+  *
+  * Framework class per platform (package `kyo.test.runner`):
+  *   - JVM       -> SbtFramework
+  *   - JS / Wasm -> JsFramework
+  *   - Native    -> NativeFramework
+  *
+  * Mix the matching trait into each platform's test object:
+  *   object test extends ScalaTests       with KyoTestModule
+  *   object test extends ScalaJSTests      with KyoTestJSModule
+  *   object test extends ScalaNativeTests  with KyoTestNativeModule
+  */
+trait KyoTestModule extends TestModule {
+  def kyoVersion: T[String] = Task { KymoraVersions.Kyo }
+
+  override def testFramework: T[String] = "kyo.test.runner.SbtFramework"
+
+  override def mandatoryMvnDeps: T[Seq[Dep]] = Task {
+    super.mandatoryMvnDeps() ++ Seq(
+      // kyo-test-api/-runner declare the kyo effect modules as `provided`, so the
+      // consumer must supply them. kyo-core transitively pulls kyo-prelude /
+      // kyo-kernel / kyo-data, which define `<`, Async, Abort, Scope, Frame.
+      mvn"io.getkyo::kyo-core::${kyoVersion()}",
+      mvn"io.getkyo::kyo-test-api::${kyoVersion()}",
+      mvn"io.getkyo::kyo-test-runner::${kyoVersion()}"
+    )
+  }
+}
+
+trait KyoTestJSModule extends KyoTestModule {
+  override def testFramework: T[String] = "kyo.test.runner.JsFramework"
+}
+
+trait KyoTestNativeModule extends KyoTestModule {
+  override def testFramework: T[String] = "kyo.test.runner.NativeFramework"
+}
+
 trait CommonScalaJSModule extends ScalaJSModule with scalafmt.ScalafmtModule {
-  def scalaJSVersion = "1.20.1"
+  def scalaJSVersion = "1.21.0"
 }
 
 /** Scala.js module variant that emits a Wasm GC module instead of plain JS.

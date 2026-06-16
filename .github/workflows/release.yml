@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the leading v
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  GIT_CLIFF_VERSION: "2.12.0"
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+      release_name: ${{ steps.metadata.outputs.release_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: metadata
+        uses: ./.github/actions/release-metadata
+        with:
+          version: ${{ github.event.inputs.version }}
+
+  build:
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Install Scala Native toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libunwind-dev libgc-dev
+
+      - name: Compile all modules
+        run: ./mill __.compile
+
+      - name: Run tests
+        run: ./mill __.test
+
+  publish:
+    needs:
+      - metadata
+      - build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+      RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
+      RELEASE_PRERELEASE: ${{ needs.metadata.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create tag for manual release
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: scripts/ci/create-release-tag.sh
+
+      - name: Install git-cliff
+        shell: bash
+        run: scripts/ci/install-git-cliff.sh "${{ env.GIT_CLIFF_VERSION }}"
+
+      - name: Build release notes
+        id: release-notes
+        shell: bash
+        run: scripts/ci/build-release-notes.sh "${{ needs.metadata.outputs.version }}"
+
+      - name: Create or update GitHub release
+        shell: bash
+        env:
+          RELEASE_NOTES_FILE: ${{ steps.release-notes.outputs.release_notes_file }}
+        run: scripts/ci/create-or-update-github-release.sh
