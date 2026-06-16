@@ -279,7 +279,7 @@ class VfsMetadataTests extends Test[Any]:
     }
 
     "renders timestamps in UTC ISO-8601" in {
-        assert(VfsTimestamp.epochMillis(1781592600000L).render == "2026-06-16T09:30:00Z")
+        assert(VfsTimestamp.epochMillis(1781602200000L).render == "2026-06-16T09:30:00Z")
     }
 
     "stores stat metadata using opaque domain types" in {

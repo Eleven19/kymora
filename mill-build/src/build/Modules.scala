@@ -38,6 +38,24 @@ trait CommonScalaModule extends ScalaModule with scalafmt.ScalafmtModule {
   }
 }
 
+trait KymoraPlatformScalaModule extends PlatformScalaModule {
+  def sharedPlatformCrossSuffixes: Seq[String] = Seq("js", "jvm", "native")
+
+  override def sourcesFolders: Seq[os.SubPath] =
+    val platform = platformCrossSuffix
+    val shared =
+      if sharedPlatformCrossSuffixes.contains(platform) then
+        sharedPlatformCrossSuffixes
+          .filterNot(_ == platform)
+          .map(other => Seq(platform, other).sorted.mkString("-"))
+          .distinct
+          .sorted
+          .map(suffix => os.SubPath(s"src-$suffix"))
+      else Seq.empty
+
+    super.sourcesFolders ++ shared
+}
+
 trait CommonScalaTestModule extends ScalaModule with scalafmt.ScalafmtModule
 
 /** kyo-test wiring for Mill.
