@@ -13,27 +13,21 @@ trait CoreModule extends _root_.build.CommonScalaModule
     )
 }
 
-trait CoreTestModule extends _root_.build.CommonScalaTestModule
-    with TestModule.ZioTest {
+trait CoreTestModule extends _root_.build.CommonScalaTestModule {
 
     override def sources = Task.Sources(
         moduleDir / os.up / "test" / "src"
     )
-
-    def mvnDeps = Seq(
-        mvn"dev.zio::zio-test::2.1.24",
-        mvn"dev.zio::zio-test-sbt::2.1.24"
-    )
 }
 
 object jvm extends CoreModule {
-    object test extends ScalaTests with CoreTestModule
+    object test extends ScalaTests with CoreTestModule with _root_.build.KyoTestModule
 }
 
 object js extends CoreModule with _root_.build.CommonScalaJSModule {
-    object test extends ScalaJSTests with CoreTestModule
+    object test extends ScalaJSTests with CoreTestModule with _root_.build.KyoTestJSModule
 }
 
 object native extends CoreModule with _root_.build.CommonScalaNativeModule {
-    object test extends ScalaNativeTests with CoreTestModule
+    object test extends ScalaNativeTests with CoreTestModule with _root_.build.KyoTestNativeModule
 }

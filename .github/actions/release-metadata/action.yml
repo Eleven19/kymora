@@ -1,0 +1,30 @@
+name: release-metadata
+description: Normalize release version, tag, and prerelease metadata.
+
+inputs:
+  version:
+    description: Release version without a leading v. Used for workflow_dispatch.
+    required: false
+
+outputs:
+  version:
+    description: Normalized semantic version without a leading v.
+    value: ${{ steps.metadata.outputs.version }}
+  tag:
+    description: Git tag with a leading v.
+    value: ${{ steps.metadata.outputs.tag }}
+  prerelease:
+    description: Whether the version is a semantic prerelease.
+    value: ${{ steps.metadata.outputs.prerelease }}
+  release_name:
+    description: Human-readable release name.
+    value: ${{ steps.metadata.outputs.release_name }}
+
+runs:
+  using: composite
+  steps:
+    - id: metadata
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+      run: ${{ github.action_path }}/release-metadata.sh
