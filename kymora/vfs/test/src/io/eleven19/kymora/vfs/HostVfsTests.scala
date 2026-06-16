@@ -3,10 +3,18 @@ package io.eleven19.kymora.vfs
 import java.nio.charset.StandardCharsets
 
 import io.eleven19.kymora.vfs.internal.HostPlatform
+import io.eleven19.kymora.vfs.internal.HostVfs
 import kyo.*
 import kyo.test.*
 
 class HostVfsTests extends Test[Any]:
+    // Build host (kyo.Path) ground-truth paths without kyo.Path's `/` operator,
+    // which drops the Windows drive letter and re-anchors to the CWD's drive
+    // (see HostVfs.resolve; getkyo/kyo#1678, Eleven19/kymora#3). Virtual `VPath`
+    // joins are unaffected.
+    extension (base: Path)
+        private def host(segments: String*): Path = HostVfs.resolve(base, segments*)
+
     "reads and writes under a confined host root" in {
         val program =
             for
@@ -15,7 +23,7 @@ class HostVfsTests extends Test[Any]:
                 path  = VPath.root / "config" / "app.conf"
                 _        <- fs.write(path, "host=true")
                 read     <- fs.read(path)
-                hostRead <- (root / "config" / "app.conf").read
+                hostRead <- root.host("config", "app.conf").read
             yield
                 assert(read == "host=true")
                 assert(hostRead == "host=true")
@@ -49,8 +57,8 @@ class HostVfsTests extends Test[Any]:
                 fs   <- Vfs.host.init(root)
                 path <- VPath.parse("/../../outside.txt")
                 _             <- fs.write(path, "inside-root")
-                confinedRead  <- (root / "outside.txt").read
-                siblingExists <- (root / ".." / "outside.txt").exists
+                confinedRead  <- root.host("outside.txt").read
+                siblingExists <- root.host("..", "outside.txt").exists
             yield
                 assert(path.show == "/outside.txt")
                 assert(confinedRead == "inside-root")
@@ -63,9 +71,9 @@ class HostVfsTests extends Test[Any]:
         val program =
             for
                 root <- Path.tempDir("kymora-vfs-host")
-                real = root / "real"
-                _ <- (real / "app.conf").write("safe=true")
-                _ <- HostPlatform.createSymlink(root / "current", real)
+                real = root.host("real")
+                _ <- real.host("app.conf").write("safe=true")
+                _ <- HostPlatform.createSymlink(root.host("current"), real)
                 fs = Vfs.host.init(root)
                 vfs     <- fs
                 read    <- vfs.read(VPath.root / "current" / "app.conf")
@@ -87,9 +95,9 @@ class HostVfsTests extends Test[Any]:
         val program =
             for
                 root <- Path.tempDir("kymora-vfs-host")
-                real = root / "real"
-                _ <- (real / "file.txt").write("payload")
-                _ <- HostPlatform.createSymlink(root / "current", real)
+                real = root.host("real")
+                _ <- real.host("file.txt").write("payload")
+                _ <- HostPlatform.createSymlink(root.host("current"), real)
                 fs      <- Vfs.host.init(root)
                 entries <- Scope.run(fs.walk(VPath.root / "current", followLinks = true).run)
             yield assert(entries.map(_.show) == Chunk("/current/file.txt"))
@@ -102,8 +110,8 @@ class HostVfsTests extends Test[Any]:
             for
                 root <- Path.tempDir("kymora-vfs-host")
                 outside <- Path.tempDir("kymora-vfs-host-outside")
-                _       <- (outside / "secret.txt").write("secret=true")
-                _       <- HostPlatform.createSymlink(root / "escape", outside)
+                _       <- outside.host("secret.txt").write("secret=true")
+                _       <- HostPlatform.createSymlink(root.host("escape"), outside)
                 fs = Vfs.host.init(root)
                 vfs        <- fs
                 read       <- Abort.run(vfs.read(VPath.root / "escape" / "secret.txt"))
@@ -124,9 +132,9 @@ class HostVfsTests extends Test[Any]:
         val program =
             for
                 root <- Path.tempDir("kymora-vfs-host")
-                real = root / "real"
-                _ <- (real / "file.txt").write("payload")
-                _ <- HostPlatform.createSymlink(root / "current", real)
+                real = root.host("real")
+                _ <- real.host("file.txt").write("payload")
+                _ <- HostPlatform.createSymlink(root.host("current"), real)
                 fs   <- Vfs.host.init(root)
                 real <- fs.realPath(VPath.root / "current" / "file.txt")
             yield assert(real.show == "/real/file.txt")
@@ -139,8 +147,8 @@ class HostVfsTests extends Test[Any]:
             for
                 root <- Path.tempDir("kymora-vfs-host")
                 outside <- Path.tempDir("kymora-vfs-host-outside")
-                _       <- (outside / "secret.txt").write("secret=true")
-                _       <- HostPlatform.createSymlink(root / "escape", outside)
+                _       <- outside.host("secret.txt").write("secret=true")
+                _       <- HostPlatform.createSymlink(root.host("escape"), outside)
                 fs         <- Vfs.host.init(root)
                 exists     <- fs.exists(VPath.root / "escape" / "secret.txt")
                 isDir      <- fs.isDirectory(VPath.root / "escape")
@@ -161,10 +169,10 @@ class HostVfsTests extends Test[Any]:
             for
                 root <- Path.tempDir("kymora-vfs-host")
                 outside <- Path.tempDir("kymora-vfs-host-outside")
-                _       <- (outside / "secret.txt").write("secret=true")
-                dir      = root / "dir"
-                _       <- (dir / "inside.txt").write("inside=true")
-                _       <- HostPlatform.createSymlink(dir / "escape", outside)
+                _       <- outside.host("secret.txt").write("secret=true")
+                dir      = root.host("dir")
+                _       <- dir.host("inside.txt").write("inside=true")
+                _       <- HostPlatform.createSymlink(dir.host("escape"), outside)
                 fs     <- Vfs.host.init(root)
                 result <- Abort.run(Scope.run(fs.walk(VPath.root / "dir", followLinks = true).run))
                 _      <- Path(outside.toString).removeAll
@@ -177,7 +185,7 @@ class HostVfsTests extends Test[Any]:
         val program =
             for
                 root <- Path.tempDir("kymora-vfs-host")
-                _    <- (root / "data" / "users.txt").write("alice\nbob\n")
+                _    <- root.host("data", "users.txt").write("alice\nbob\n")
                 fs   <- Vfs.host.init(root)
                 path  = VPath.root / "data" / "users.txt"
                 lines    <- fs.readLines(path)
