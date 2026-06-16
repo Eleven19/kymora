@@ -1,0 +1,42 @@
+package build.kymora.vfs
+
+import mill.*, scalalib.*, scalajslib.*, scalanativelib.*
+
+trait VfsModule extends _root_.build.CommonScalaModule
+    with PlatformScalaModule
+    with _root_.build.PublishSupport {
+
+    override def artifactName = "kymora-vfs"
+
+    def mvnDeps = Seq(
+        mvn"com.outr::scribe::${_root_.build.KymoraVersions.Scribe}"
+    )
+}
+
+trait VfsTestModule extends _root_.build.CommonScalaTestModule
+    with TestModule.ZioTest {
+
+    override def sources = Task.Sources(
+        moduleDir / os.up / "test" / "src"
+    )
+
+    def mvnDeps = Seq(
+        mvn"dev.zio::zio-test::2.1.24",
+        mvn"dev.zio::zio-test-sbt::2.1.24"
+    )
+}
+
+object jvm extends VfsModule {
+    override def moduleDeps = Seq(build.kymora.core.jvm)
+    object test extends ScalaTests with VfsTestModule
+}
+
+object js extends VfsModule with _root_.build.CommonScalaJSModule {
+    override def moduleDeps = Seq(build.kymora.core.js)
+    object test extends ScalaJSTests with VfsTestModule
+}
+
+object native extends VfsModule with _root_.build.CommonScalaNativeModule {
+    override def moduleDeps = Seq(build.kymora.core.native)
+    object test extends ScalaNativeTests with VfsTestModule
+}

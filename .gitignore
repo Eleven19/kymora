@@ -1,0 +1,25 @@
+# Mill
+out/
+.bsp/
+.metals/
+.bloop/
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+
+# Oh My Claude Code / agent state
+.omc/
+.claude/settings.local.json
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+.worktrees/
+
+# OS
+.DS_Store
+
+# Scala
+*.class
+*.tasty
+target/

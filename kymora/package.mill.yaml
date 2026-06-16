@@ -1,0 +1,5 @@
+extends: [_root_.build.CommonScalaModule, _root_.build.PublishSupport]
+artifactName: kymora
+moduleDeps:
+  - build.kymora.core.jvm
+  - build.kymora.vfs.jvm
