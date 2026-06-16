@@ -1,5 +1,7 @@
 # kymora
 
+Kymora provides extensions to the [Kyo](https://github.com/getkyo/kyo) framework along with additional modules and utilities to support building applications with Kyo.
+
 ## Developing
 
 This project uses [Jujutsu (`jj`)](https://jj-vcs.github.io/jj/) as its default
