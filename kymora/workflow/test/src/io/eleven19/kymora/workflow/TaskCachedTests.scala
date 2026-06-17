@@ -25,4 +25,13 @@ class TaskCachedTests extends Test[Any]:
     assert(cached.deps.size == 1)
     assert(cached.deps.head eq dep)
   }
+  "Task.init (6 deps) records all deps in order" in {
+    val ds = (1 to 6).map(i => Task.init(s"d$i")(i)).toVector
+    val t  = Task.init("six")(ds(0), ds(1), ds(2), ds(3), ds(4), ds(5)) {
+      (a, b, c, d, e, f) => a + b + c + d + e + f
+    }
+    val cached = t.asInstanceOf[Task.Cached[Int]]
+    assert(cached.deps.size == 6)
+    (0 until 6).foreach(i => assert(cached.deps(i).eq(ds(i))))
+  }
 end TaskCachedTests
