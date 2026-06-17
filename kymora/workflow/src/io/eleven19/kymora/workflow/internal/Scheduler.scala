@@ -80,11 +80,7 @@ private[workflow] object Scheduler:
                     case in: Task.Input[?]       => runInput(in, cfg)
                     case c: Task.Cached[?]       => runCached(c, memo, cfg)
                     case p: Task.Persistent[?]   => runPersistent(p, memo, cfg)
-                    case _: Task.Command[?]      =>
-                      Abort.fail[WorkflowError](WorkflowError.TaskFailed(
-                        task.id,
-                        "Task.Command execution not yet implemented (plan Task 46).",
-                      ))
+                    case c: Task.Command[?]      => runCommand(c, memo, cfg)
       yield result
     }
 
@@ -265,6 +261,40 @@ private[workflow] object Scheduler:
     yield NodeResult(value, vh)
 
   // ---------------------------------------------------------------------
+  // Task.Command — always runs, never caches its own output
+  // ---------------------------------------------------------------------
+
+  /** Commands run their body on every invocation and never consult or
+    * populate the cache. Dependencies are still resolved via the normal
+    * memoized path, so a single command run reuses dep results across
+    * diamond fan-ins but cross-run memoization comes only from the
+    * dependencies themselves (Cached/Persistent), not the command.
+    *
+    * Events emitted: `TaskQueued` (from `runFreshNode`), `TaskStarted`,
+    * `TaskCompleted`. Commands never emit `TaskCached`.
+    */
+  private def runCommand(
+      task: Task.Command[?],
+      memo: AtomicRef[Map[TaskId, NodeResult]],
+      cfg: Workflow.Config,
+  )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+    val started = java.time.Instant.now()
+    for
+      depResults <- Kyo.foreach(Chunk.from(task.deps))(d => runNode(d, memo))
+      depArgs     = depResults.toIndexedSeq.map(_.value)
+      depIds      = depResults.map(r => taskIdOf(task.deps, depResults, r))
+      _          <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
+      ctx         = newCommandContext()
+      value      <- runBody(task.id, task.body(ctx, depArgs))
+      // Command outputs are not consumed by downstream deps (Commands are
+      // entry points), so the valueHash is a sentinel rather than a hash
+      // of the runtime value.
+      vh          = Fingerprint.unsafe("command:nostore")
+      _          <- cfg.reporter.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+    yield NodeResult(value, vh)
+  end runCommand
+
+  // ---------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------
 
@@ -278,6 +308,17 @@ private[workflow] object Scheduler:
 
   private def newTaskContext()(using Frame): TaskContext =
     TaskContext(
+      dest  = io.eleven19.kymora.vfs.VPath(""),
+      emit  = (_: Any) => (),
+      clock = Clock.live,
+    )
+
+  /** Build a [[CommandContext]] for the Command body. CLI parsing lands in
+    * plan Phase 13 (Tasks 50+); until then the invocation is empty.
+    */
+  private def newCommandContext()(using Frame): CommandContext =
+    CommandContext(
+      args  = CliInvocation(Chunk.empty[String], Maybe.empty),
       dest  = io.eleven19.kymora.vfs.VPath(""),
       emit  = (_: Any) => (),
       clock = Clock.live,
