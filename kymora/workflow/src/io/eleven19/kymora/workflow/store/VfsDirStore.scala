@@ -15,16 +15,6 @@ import kyo.*
   */
 object VfsDirStore:
 
-  /** Process-wide per-key locks for [[Impl.openPersistentWorkspace]].
-    *
-    * Keyed by `CacheKey.value`. Real cross-process advisory locking would
-    * need an OS file lock; this in-process map is enough for v1 correctness
-    * inside a single JVM and is shared across all `VfsDirStore` instances
-    * built from this object.
-    */
-  private val persistentLocks =
-    new java.util.concurrent.ConcurrentHashMap[String, java.util.concurrent.locks.ReentrantLock]()
-
   /** Constructs a `CacheStore` rooted at `root` inside `vfs`. */
   def init(root: VPath, vfs: Vfs)(using Frame): CacheStore < (Async & Abort[StoreError]) =
     new Impl(root, vfs)
@@ -98,6 +88,19 @@ object VfsDirStore:
   end toCacheKey
 
   private final class Impl(root: VPath, vfs: Vfs) extends CacheStore:
+
+    /** Per-key locks for [[openPersistentWorkspace]].
+      *
+      * Scoped to this `Impl` instance (one `VfsDirStore`/`root`). Two stores
+      * that happen to use the same `CacheKey.value` do not contend, because
+      * their `.dest/` paths live under different roots and never touch the
+      * same files.
+      *
+      * Real cross-process advisory locking would need an OS file lock; this
+      * in-process map is enough for v1 correctness inside a single JVM.
+      */
+    private val persistentLocks =
+      new java.util.concurrent.ConcurrentHashMap[String, java.util.concurrent.locks.ReentrantLock]()
 
     def read(key: CacheKey): Maybe[StoredManifest] < (Async & Abort[StoreError]) =
       val p = manifestPath(root, key)
