@@ -44,3 +44,10 @@ ObjectMothers.
   through `Task.init`, `Task.persistent`, `Task.source`, `Task.input`,
   `Task.command`, or `Task.cli[Args]`. This sidesteps the `kyo.Command`
   shadow that `import kyo.*` introduces.
+
+## Hashing
+
+`Fingerprint.ofBytes` is backed by the pure-Scala BLAKE3 implementation in
+`pt.kcry::blake3` — cross-platform across JVM, Scala.js, and Scala Native.
+Hashes are byte-identical on every platform, so cache manifests written on
+one platform are valid on any other.

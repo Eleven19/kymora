@@ -71,10 +71,11 @@ These are documented in-plan and are expected to be lifted in a v1.x follow-up.
   derivation. `usage` text is computed from explicitly declared fields.
 - **`Config.continueOnError` (Phase 12):** Shape-only — the scheduler does
   not yet fan out failures.
-- **Cross-platform hashing (Phase 16):** JS and Native use an FNV-1a
-  fallback in place of Blake3; JVM uses the real Blake3 binding. All three
-  platforms produce stable, deterministic hashes within a platform; cross-
-  platform manifest portability is therefore JVM-only for v1.
+- **Cross-platform hashing (Phase 16):** Resolved — all three platforms
+  now share the pure-Scala `pt.kcry::blake3` implementation, producing
+  byte-identical BLAKE3 digests on JVM, Scala.js, and Scala Native. Cache
+  manifests written on one platform are valid on any other. The previous
+  FNV-1a fallback for JS/Native has been removed (closes #8).
 - **Error fields (Phase 6):** A few error variants carry `String` payloads
   instead of `Throwable` so the error ADT remains `Schema`-derivable. The
   engine wraps real exceptions at the boundary.

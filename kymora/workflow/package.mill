@@ -11,23 +11,11 @@ trait WorkflowModule extends _root_.build.CommonScalaModule
     def mvnDeps = Seq(
         mvn"com.lihaoyi::mainargs::${_root_.build.KymoraVersions.mainargs}",
         mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
-        mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}"
-    )
-}
-
-/** JVM-only extension of [[WorkflowModule]].
-  *
-  * Adds the pure-Java Blake3 binding used by the engine's `Fingerprint`
-  * primitive. JS and Native get platform-specific stubs in `src-js` /
-  * `src-native` (real bindings land in plan Task 62).
-  */
-trait WorkflowJvmModule extends WorkflowModule {
-    override def mvnDeps = Seq(
-        mvn"com.lihaoyi::mainargs::${_root_.build.KymoraVersions.mainargs}",
-        mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
         mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
-        // Pure-Java Blake3 — single jar, MIT, ~10 KiB.
-        mvn"io.github.rctcwyvrn:blake3:1.3"
+        // Pure-Scala BLAKE3 — cross-platform (JVM / Scala.js / Scala Native)
+        // via `%%%`. Used by the engine's `Fingerprint` primitive so cache
+        // manifests are byte-identical across platforms.
+        mvn"pt.kcry::blake3::3.1.2"
     )
 }
 
@@ -38,7 +26,7 @@ trait WorkflowTestModule extends _root_.build.CommonScalaTestModule {
     )
 }
 
-object jvm extends WorkflowJvmModule {
+object jvm extends WorkflowModule {
     override def moduleDeps = Seq(build.kymora.vfs.jvm)
     object test extends ScalaTests with WorkflowTestModule with _root_.build.KyoTestModule {
         override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.jvm)
