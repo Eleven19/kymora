@@ -424,4 +424,19 @@ object Task:
       scope: TaskScope,
   ): Task[A] =
     persistent[A, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(body)
+
+  /** Command kind: always runs (no memoization of own output). Deps still
+    * memoize normally.
+    *
+    * Body receives a [[CommandContext]] (TaskContext + CLI args) rather than
+    * a plain [[TaskContext]]. CLI-aware smart constructors land in Phase 13;
+    * for now the public [[io.eleven19.kymora.workflow.Command]] alias only
+    * exposes the non-CLI `init` overloads.
+    */
+  final class Command[A] private[workflow] (
+      val id: TaskId,
+      val version: TaskVersion,
+      private[workflow] val deps: Seq[Task[?]],
+      private[workflow] val body: (CommandContext, IndexedSeq[Any]) => A < (Async & Abort[Throwable]),
+  ) extends Task[A]
 end Task
