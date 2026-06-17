@@ -65,31 +65,16 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
   )(using
       Frame,
-  ): Chunk[NodeResult] < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
+  ): Chunk[NodeResult] < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     if cfg.parallelism <= 1 || deps.size <= 1 then
       Kyo.foreach(deps)(d => runNode(d, memo))
     else
       Async.foreach(deps, cfg.parallelism)(d => runNode(d, memo))
 
-  /** Execute a single goal under the ambient `Workflow.Config`.
-    *
-    * Wraps the run with a default-empty [[Workflow.CliTokens]] Env so plain
-    * `Workflow.run` (no CLI on the stack) satisfies the scheduler's Env
-    * requirements. [[Workflow.runCli]] supplies a populated `CliTokens` via
-    * [[executeWithTokens]].
-    */
+  /** Execute a single goal under the ambient `Workflow.Config`. */
   def execute[A](goal: Task[A])(using
       Frame,
   ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
-    Env.run(Workflow.CliTokens.empty)(executeWithTokens(goal))
-
-  /** Same as [[execute]] but expects the caller to supply the [[CliTokens]]
-    * value via its own `Env.run`. Used by [[Workflow.runCli]] so the CLI
-    * token list reaches the `Command` body's [[CommandContext]].
-    */
-  def executeWithTokens[A](goal: Task[A])(using
-      Frame,
-  ): A < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     Graph.collect(Seq(goal)) match
       case Left(err)  => Abort.fail(err)
       case Right(_)   =>
@@ -104,7 +89,7 @@ private[workflow] object Scheduler:
       memo: AtomicRef[Map[TaskId, NodeResult]],
   )(using
       Frame,
-  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
+  ): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     memo.get.map { current =>
       current.get(task.id) match
         case Some(existing) => (existing: NodeResult)
@@ -115,15 +100,14 @@ private[workflow] object Scheduler:
     }
 
   /** Execute a node from scratch (no memo entry). Dispatches on the task
-    * kind. Command is not implemented in this task — it surfaces a
-    * `WorkflowError.TaskFailed` describing the gap.
+    * kind.
     */
   private def runFreshNode(
       task: Task[?],
       memo: AtomicRef[Map[TaskId, NodeResult]],
   )(using
       Frame,
-  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
+  ): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     Env.use[Workflow.Config] { cfg =>
       for
         _      <- cfg.observer.onEvent(WorkflowEvent.TaskQueued(task.id))
@@ -186,7 +170,7 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
   )(using
       Frame,
-  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
+  ): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     for
       // Run dependencies first, honoring cfg.parallelism (Task 47).
       depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
@@ -194,7 +178,7 @@ private[workflow] object Scheduler:
       depFps      = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
       // Compute hashes.
       bodyHash    = Hashing.bodyHash(task.id, task.version)
-      expected    = Hashing.inputsHash(task.id, bodyHash, depFps)
+      expected    = Hashing.inputsHash(task.id, bodyHash, depFps, task.paramHash)
       key         = CacheKey.fromTaskId(task.id)
       // Read the (sentinel) cache entry.
       existing   <- readManifest(cfg, key)
@@ -264,13 +248,13 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
   )(using
       Frame,
-  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
+  ): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     for
       depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
       depFps      = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
       bodyHash    = Hashing.bodyHash(task.id, task.version)
-      expected    = Hashing.inputsHash(task.id, bodyHash, depFps)
+      expected    = Hashing.inputsHash(task.id, bodyHash, depFps, task.paramHash)
       key         = CacheKey.fromTaskId(task.id)
       existing   <- readManifest(cfg, key)
       result     <- existing match
@@ -335,14 +319,14 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
   )(using
       Frame,
-  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
+  ): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     val started = java.time.Instant.now()
     for
       depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
       depIds      = depResults.map(r => taskIdOf(task.deps, depResults, r))
       _          <- cfg.observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
-      ctx        <- newCommandContext()
+      ctx         = newTaskContext()
       value      <- runBody(task.id, task.body(ctx, depArgs))
       // Command outputs are not consumed by downstream deps (Commands are
       // entry points), so the valueHash is a sentinel rather than a hash
@@ -370,24 +354,6 @@ private[workflow] object Scheduler:
       emit  = (_: Any) => (),
       clock = Clock.live,
     )
-
-  /** Build a [[CommandContext]] for the Command body.
-    *
-    * CLI tokens are sourced from the ambient [[Workflow.CliTokens]] Env, which
-    * [[Workflow.runCli]] populates. Plain [[Workflow.run]] callers wrap with
-    * an empty `CliTokens`, so this Env requirement is always satisfied.
-    */
-  private def newCommandContext()(using
-      Frame,
-  ): CommandContext < Env[Workflow.CliTokens] =
-    Env.use[Workflow.CliTokens] { tokens =>
-      CommandContext(
-        args  = CliInvocation(tokens.raw, Maybe.empty),
-        dest  = io.eleven19.kymora.vfs.VPath(""),
-        emit  = (_: Any) => (),
-        clock = Clock.live,
-      )
-    }
 
   /** Best-effort fingerprint of a runtime value. Uses `Schema[String]` on
     * the `value.toString` so we always get a deterministic-ish hash without

@@ -28,7 +28,7 @@ suites are subsets of that target. Compile coverage is verified by
 | #5 reporter event sequences | `ConsoleReporterTests`, `JsonLinesReporterTests`, `ReporterTests`, `WorkflowEventTests` | PASS | `format` / `toJson` covered as pure helpers; success / cached / failed event sequences asserted via `TestReporter` in `EngineTests`. |
 | #6 no regression in core / vfs | `./mill kymora.core.jvm.{compile,test}`, `./mill kymora.vfs.jvm.{compile,test}` | PASS | core compile clean; vfs 83 / 83 tests pass; core test count below. |
 | #7 `Task.persistent` round-trip | `PersistentEngineTests`, `TaskPersistentTests` | PASS | Cached-equivalent execution path verified. Real `.dest/` retention across separate `run` invocations is deferred (Task 45 simplification: persistent behaves like `Cached` for v1). |
-| #8 `Command.cli` mainargs + `runCli` | `RunCliTests`, `CommandArgsTests`, `CommandTests`, `CommandEngineTests` | PASS | `CommandArgs` factory + manual parser implemented; full mainargs typeclass derivation deferred (Task 50 simplification). `--help` produces the `CommandArgs.usage` text. |
+| #8 CLI surface (replaces `Command.cli` mainargs + `runCli`) | `CommandEngineTests`, `cli.CliTests` | PASS | `Task.cli` + `Workflow.runCli` removed and replaced by parameterized `Task.command[A, P]` + `io.eleven19.kymora.workflow.cli.Cli.runWith` backed by kyo-case-app (resolves #4 + #5). |
 | #9 examples end-to-end | `./mill kymora.examples.jvm.test` covers `SmileBuildTests`, `AgentSkillsTests` | PASS | 6 / 6 example tests passing. `smile-build` and `agent-skills` both exercise their workflows against a temp cache and assert event sequences. |
 
 ## Test totals (modules in this workspace)
@@ -66,9 +66,11 @@ These are documented in-plan and are expected to be lifted in a v1.x follow-up.
   (the zinc-style use case in §14.1) is deferred.
 - **`verifyDest` (Phase 12, Task 49):** Flag is plumbed through `Config`
   and `Cacheable`; the engine does not yet rehash `.dest/` on HIT.
-- **`Command.cli` parser (Phase 13, Task 50):** `CommandArgs` provides a
-  hand-rolled `from` factory in lieu of full mainargs `ParserForClass`
-  derivation. `usage` text is computed from explicitly declared fields.
+- **`Command.cli` parser (Phase 13, Task 50):** Resolved. The hand-rolled
+  `CommandArgs` factory + mainargs-shaped surface has been replaced by
+  parameterized `Task.command[A, P]` and `cli.Cli.runWith` backed by
+  kyo-case-app, which provides full `Parser` / `Help` derivation. Usage
+  banners come from case-app's `Help`. Closes #4 + #5.
 - **`Config.continueOnError` (Phase 12):** Shape-only — the scheduler does
   not yet fan out failures.
 - **Cross-platform hashing (Phase 16):** Resolved — all three platforms

@@ -10,14 +10,26 @@ for the architecture and conventions.
 - `Task[A]` — sealed trait. Variants: `Task.Cached`, `Task.Persistent`,
   `Task.Source`, `Task.Input`, `Task.Command`. All built via
   `Task.<kind>` smart constructors:
-  - `Task.init` — cached
+  - `Task.cached` (canonical) / `Task.init` (alias) — cached
   - `Task.persistent` — persisted-output
   - `Task.source` / `Task.sourceQuick` — file/dir input
   - `Task.input` — pure-value input
-  - `Task.command` / `Task.cli[Args]` — always-runs command
+  - `Task.command` — always-runs command
+- **Parameterized variants:** `Task.cached[A, P]`, `Task.persistent[A, P]`,
+  and `Task.command[A, P]` return a `P => Task[A]` (or `P => Command[A]`).
+  For Cached/Persistent, `P` participates in the cache key via
+  `Hashable[P]` — different `P` values produce different cache entries
+  against the same `TaskId`. Commands carry no `paramHash` (they never
+  cache).
 - `Workflow.scope(prefix)` — definition-scope helper (compile-time validated).
 - `Workflow.Config` — runtime config injected via `Env[Workflow.Config]`.
-- `Workflow.run(goal)` / `runAll` / `runCli` — engine entry points.
+- `Workflow.run(goal)` / `runAll` — engine entry points.
+- `io.eleven19.kymora.workflow.cli.Cli.runWith(task, tokens)` — bridges
+  [kyo-case-app](https://github.com/getkyo/kyo) argument parsing to
+  parameterized commands. Provide a case class with `caseapp.Parser` /
+  `caseapp.Help` instances in scope, build the command via
+  `Task.command[A, Args]("name") { args => ... }`, then run with
+  `Cli.runWith(cmd, args)` inside a `Workflow.Config` `Env`.
 - `CacheStore` — pluggable persistence. Default: `VfsDirStore` backed by
   `kymora-vfs`.
 - `WorkflowEvent` + `Observer` — observability stream.
@@ -41,9 +53,15 @@ ObjectMothers.
 
 - **Always construct tasks via `Task.<kind>`.** There are no top-level
   `Source` / `Input` / `Command` / `Cmd` aliases — every kind is reached
-  through `Task.init`, `Task.persistent`, `Task.source`, `Task.input`,
-  `Task.command`, or `Task.cli[Args]`. This sidesteps the `kyo.Command`
-  shadow that `import kyo.*` introduces.
+  through `Task.cached` (or its `Task.init` alias), `Task.persistent`,
+  `Task.source`, `Task.input`, or `Task.command`. This sidesteps the
+  `kyo.Command` shadow that `import kyo.*` introduces.
+- **CLI argument parsing uses kyo-case-app.** The engine no longer ships
+  a `Task.cli` constructor or `Workflow.runCli` entry point. Instead,
+  build a parameterized command via `Task.command[A, Args]("name") { ... }`
+  and invoke it through `io.eleven19.kymora.workflow.cli.Cli.runWith`,
+  which threads a `caseapp.Parser[Args]` + `caseapp.Help[Args]` into the
+  same `Workflow.run` path.
 
 ## Hashing
 

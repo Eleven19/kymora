@@ -27,15 +27,17 @@ object Build:
   // per-module `smile.<name>` scopes that the modules themselves use.
   private given TaskScope = TaskScope.unsafe("smile")
 
-  /** CLI-driven entry point. `Workflow.runCli` threads the token list into
-    * the body; the trivial `CommandArgs[Unit]` instance treats any tokens as
-    * a no-op so callers can wire this into `Workflow.runCli(cli, args)` with
-    * an arbitrary command line.
+  /** Entry-point Command for the build. Returns a one-line descriptor — a
+    * real-world CLI would dispatch on a sub-command and trigger the
+    * appropriate `Workflow.run` over one of the module tasks.
     *
-    * The body returns a one-line descriptor — a real-world CLI would dispatch
-    * on a sub-command and trigger the appropriate `Workflow.run` over one of
-    * the module tasks. */
-  val cli: Task.Command[String] = Task.cli[Unit, String]("cli") { _ =>
+    * To wire CLI argument parsing, define a case class with
+    * `caseapp.Parser` + `caseapp.Help` derivations and use the
+    * parameterized variant
+    * `Task.command[String, Args]("cli") { args => ... }` together with
+    * `io.eleven19.kymora.workflow.cli.Cli.runWith`.
+    */
+  val cli: Task.Command[String] = Task.command("cli") {
     "smile-build CLI: targets = [core.compile, core.jar, app.compile, app.jar]"
   }
 

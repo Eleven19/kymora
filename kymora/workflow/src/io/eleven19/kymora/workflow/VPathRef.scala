@@ -69,6 +69,7 @@ object VPathRef:
         parse(s) match
           case Result.Success(v) => v
           case _                 =>
+            //TODO: Shouldn't this be providing a failure instead of throwing an exception? We want errors as values, not exceptions.
             throw new IllegalArgumentException(s"Malformed VPathRef: $s")
     )
 

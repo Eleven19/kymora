@@ -2,8 +2,7 @@ package io.eleven19.kymora.workflow
 
 import kyo.*
 
-/** Errors raised while parsing the CLI surface (`runCli`) before any task
-  * actually runs.
+/** Errors raised while parsing the CLI surface before any task actually runs.
   *
   * Kept separate from [[WorkflowError]] so the CLI layer can report
   * usage-style failures without polluting the engine's error surface.
@@ -14,7 +13,11 @@ import kyo.*
   */
 sealed trait CliParseError derives CanEqual, Schema
 object CliParseError:
-  /** A generic parse failure with the renderable usage banner attached. */
+  /** A generic parse failure with the renderable usage banner attached.
+    *
+    * Used by [[io.eleven19.kymora.workflow.cli.Cli]] to wrap case-app's
+    * `caseapp.core.Error` value into a typed Kyo error channel.
+    */
   final case class Failed(message: String, usage: String) extends CliParseError
 
   /** The first token did not match any registered task id.
@@ -24,9 +27,4 @@ object CliParseError:
     *   suggestion.
     */
   final case class UnknownCommand(token: String, available: Chunk[TaskId]) extends CliParseError
-
-  /** The task exists but does not register a `CommandArgs` parser, so it
-    * cannot be invoked from the CLI.
-    */
-  final case class MissingArgsParser(taskId: TaskId) extends CliParseError
 end CliParseError

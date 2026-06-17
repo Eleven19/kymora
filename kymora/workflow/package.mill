@@ -3,15 +3,15 @@ package build.kymora.workflow
 import mill.*, scalalib.*, scalajslib.*, scalanativelib.*
 
 trait WorkflowModule extends _root_.build.CommonScalaModule
-    with PlatformScalaModule
+    with _root_.build.KymoraPlatformScalaModule
     with _root_.build.PublishSupport {
 
     override def artifactName = "kymora-workflow"
 
     def mvnDeps = Seq(
-        mvn"com.lihaoyi::mainargs::${_root_.build.KymoraVersions.mainargs}",
         mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
         mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-case-app::${_root_.build.KymoraVersions.Kyo}",
         // Pure-Scala BLAKE3 — cross-platform (JVM / Scala.js / Scala Native)
         // via `%%%`. Used by the engine's `Fingerprint` primitive so cache
         // manifests are byte-identical across platforms.

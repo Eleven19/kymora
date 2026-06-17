@@ -1,7 +1,6 @@
 package io.eleven19.kymora.workflow
 
 import io.eleven19.kymora.vfs.VPath
-import io.eleven19.kymora.workflow.cli.CommandArgs
 import kyo.*
 import scala.annotation.publicInBinary
 
@@ -66,7 +65,14 @@ object Task:
   ): Input[A] =
     new Input[A](TaskId.unsafe(scope.qualify(id).value), () => read, h)
 
-  /** Default memoized variant — cached on (id, version, dep fingerprints).
+  /** Default memoized variant — cached on (id, version, dep fingerprints, optional param hash).
+    *
+    * `paramHash` is `Maybe.empty` for unparameterized cached tasks built via
+    * `Task.cached[A](...)`. The parameterized variant
+    * `Task.cached[A, P](...)` populates it via the supplied `Hashable[P]`, so
+    * different `P` values produce different cache entries against the same
+    * `TaskId`.
+    *
     * Public via Task.cached smart constructors ([[Task.init]] is an alias).
     */
   final class Cached[A] @publicInBinary private[workflow] (
@@ -74,6 +80,7 @@ object Task:
       val version: TaskVersion,
       private[workflow] val deps: Seq[Task[?]],
       private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (Async & Abort[Throwable]),
+      private[workflow] val paramHash: Maybe[Fingerprint] = Maybe.empty,
   ) extends Task[A]
 
   // ───────────────────────── cached (canonical name) ─────────────────────────
@@ -378,6 +385,131 @@ object Task:
   ): Task[A] =
     cached[A, D1, D2, D3, D4, D5, D6](id)(d1, d2, d3, d4, d5, d6)(body)
 
+  // ──────────────────── parameterized cached (P joins cache key) ─────────────
+  //
+  // `Task.cached[A, P]` returns a `P => Task[A]`. The returned function builds
+  // a new `Task.Cached[A]` whose `paramHash` is derived from the supplied
+  // `Hashable[P]`, so different `P` values produce distinct cache entries
+  // against the same `TaskId`. We cap dep arities at 3 for parameterized
+  // variants to keep the surface manageable; users needing more can join deps
+  // through an intermediate Cached task.
+
+  /** Parameterized [[Cached]] (leaf). The returned `P => Task[A]` produces
+    * a Cached task whose `paramHash` is folded into its `inputsHash`.
+    */
+  inline def cached[A, P](inline id: String, version: TaskVersion)(
+      body: P => A < (Async & Abort[Throwable]),
+  )(using scope: TaskScope, hp: Hashable[P]): P => Task[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      val ph = hp.hash(p)
+      new Cached[A](
+        taskId,
+        version,
+        Nil,
+        (_, _) => body(p),
+        Maybe(ph),
+      )
+
+  /** Parameterized [[Cached]] (leaf, default version). */
+  inline def cached[A, P](inline id: String)(
+      body: P => A < (Async & Abort[Throwable]),
+  )(using scope: TaskScope, hp: Hashable[P]): P => Task[A] =
+    cached[A, P](id, TaskVersion.v1)(body)
+
+  /** Parameterized [[Cached]] with 1 dep. */
+  inline def cached[A, P, D1](inline id: String, version: TaskVersion)(
+      d1: Task[D1],
+  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      val ph = hp.hash(p)
+      new Cached[A](
+        taskId,
+        version,
+        Seq(d1),
+        (_, args) => body(p, args(0).asInstanceOf[D1]),
+        Maybe(ph),
+      )
+
+  /** Parameterized [[Cached]] with 1 dep (default version). */
+  inline def cached[A, P, D1](inline id: String)(
+      d1: Task[D1],
+  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    cached[A, P, D1](id, TaskVersion.v1)(d1)(body)
+
+  /** Parameterized [[Cached]] with 2 deps. */
+  inline def cached[A, P, D1, D2](inline id: String, version: TaskVersion)(
+      d1: Task[D1],
+      d2: Task[D2],
+  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      val ph = hp.hash(p)
+      new Cached[A](
+        taskId,
+        version,
+        Seq(d1, d2),
+        (_, args) => body(p, args(0).asInstanceOf[D1], args(1).asInstanceOf[D2]),
+        Maybe(ph),
+      )
+
+  /** Parameterized [[Cached]] with 2 deps (default version). */
+  inline def cached[A, P, D1, D2](inline id: String)(
+      d1: Task[D1],
+      d2: Task[D2],
+  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    cached[A, P, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
+
+  /** Parameterized [[Cached]] with 3 deps. */
+  inline def cached[A, P, D1, D2, D3](inline id: String, version: TaskVersion)(
+      d1: Task[D1],
+      d2: Task[D2],
+      d3: Task[D3],
+  )(body: (P, D1, D2, D3) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      val ph = hp.hash(p)
+      new Cached[A](
+        taskId,
+        version,
+        Seq(d1, d2, d3),
+        (_, args) =>
+          body(
+            p,
+            args(0).asInstanceOf[D1],
+            args(1).asInstanceOf[D2],
+            args(2).asInstanceOf[D3],
+          ),
+        Maybe(ph),
+      )
+
+  /** Parameterized [[Cached]] with 3 deps (default version). */
+  inline def cached[A, P, D1, D2, D3](inline id: String)(
+      d1: Task[D1],
+      d2: Task[D2],
+      d3: Task[D3],
+  )(body: (P, D1, D2, D3) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    cached[A, P, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(body)
+
   /** Same caching contract as Cached, but the .dest/ directory is preserved
     * across rebuilds — bodies see prior outputs and may update in place
     * (incremental compilers, accumulating analyses, zinc-style stores).
@@ -388,6 +520,7 @@ object Task:
       val version: TaskVersion,
       private[workflow] val deps: Seq[Task[?]],
       private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (Async & Abort[Throwable]),
+      private[workflow] val paramHash: Maybe[Fingerprint] = Maybe.empty,
   ) extends Task[A]
 
   // Leaf (no deps)
@@ -567,18 +700,139 @@ object Task:
   ): Task[A] =
     persistent[A, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(body)
 
+  // ─────────────── parameterized persistent (P joins cache key) ──────────────
+
+  /** Parameterized [[Persistent]] (leaf). */
+  inline def persistent[A, P](inline id: String, version: TaskVersion)(
+      body: P => A < (Async & Abort[Throwable]),
+  )(using scope: TaskScope, hp: Hashable[P]): P => Task[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      val ph = hp.hash(p)
+      new Persistent[A](
+        taskId,
+        version,
+        Nil,
+        (_, _) => body(p),
+        Maybe(ph),
+      )
+
+  /** Parameterized [[Persistent]] (leaf, default version). */
+  inline def persistent[A, P](inline id: String)(
+      body: P => A < (Async & Abort[Throwable]),
+  )(using scope: TaskScope, hp: Hashable[P]): P => Task[A] =
+    persistent[A, P](id, TaskVersion.v1)(body)
+
+  /** Parameterized [[Persistent]] with 1 dep. */
+  inline def persistent[A, P, D1](inline id: String, version: TaskVersion)(
+      d1: Task[D1],
+  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      val ph = hp.hash(p)
+      new Persistent[A](
+        taskId,
+        version,
+        Seq(d1),
+        (_, args) => body(p, args(0).asInstanceOf[D1]),
+        Maybe(ph),
+      )
+
+  /** Parameterized [[Persistent]] with 1 dep (default version). */
+  inline def persistent[A, P, D1](inline id: String)(
+      d1: Task[D1],
+  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    persistent[A, P, D1](id, TaskVersion.v1)(d1)(body)
+
+  /** Parameterized [[Persistent]] with 2 deps. */
+  inline def persistent[A, P, D1, D2](inline id: String, version: TaskVersion)(
+      d1: Task[D1],
+      d2: Task[D2],
+  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      val ph = hp.hash(p)
+      new Persistent[A](
+        taskId,
+        version,
+        Seq(d1, d2),
+        (_, args) => body(p, args(0).asInstanceOf[D1], args(1).asInstanceOf[D2]),
+        Maybe(ph),
+      )
+
+  /** Parameterized [[Persistent]] with 2 deps (default version). */
+  inline def persistent[A, P, D1, D2](inline id: String)(
+      d1: Task[D1],
+      d2: Task[D2],
+  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    persistent[A, P, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
+
+  /** Parameterized [[Persistent]] with 3 deps. */
+  inline def persistent[A, P, D1, D2, D3](inline id: String, version: TaskVersion)(
+      d1: Task[D1],
+      d2: Task[D2],
+      d3: Task[D3],
+  )(body: (P, D1, D2, D3) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      val ph = hp.hash(p)
+      new Persistent[A](
+        taskId,
+        version,
+        Seq(d1, d2, d3),
+        (_, args) =>
+          body(
+            p,
+            args(0).asInstanceOf[D1],
+            args(1).asInstanceOf[D2],
+            args(2).asInstanceOf[D3],
+          ),
+        Maybe(ph),
+      )
+
+  /** Parameterized [[Persistent]] with 3 deps (default version). */
+  inline def persistent[A, P, D1, D2, D3](inline id: String)(
+      d1: Task[D1],
+      d2: Task[D2],
+      d3: Task[D3],
+  )(body: (P, D1, D2, D3) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+      hp: Hashable[P],
+  ): P => Task[A] =
+    persistent[A, P, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(body)
+
   /** Command kind: always runs (no memoization of own output). Deps still
     * memoize normally.
     *
-    * Body receives a [[CommandContext]] (TaskContext + CLI args) rather
-    * than a plain [[TaskContext]]. Built via [[Task.command]] (non-CLI)
-    * and [[Task.cli]] (parsed CLI args).
+    * The body receives a [[TaskContext]] just like Cached/Persistent. CLI
+    * argument parsing is handled by [[io.eleven19.kymora.workflow.cli.Cli]],
+    * which delegates to the parameterized `command[A, P]` variant.
+    *
+    * `paramHash` does NOT affect command execution (commands never cache
+    * their own output), but is carried symmetrically so the field signature
+    * stays consistent across kinds.
     */
   final class Command[A] @publicInBinary private[workflow] (
       val id: TaskId,
       val version: TaskVersion,
       private[workflow] val deps: Seq[Task[?]],
-      private[workflow] val body: (CommandContext, IndexedSeq[Any]) => A < (Async & Abort[Throwable]),
+      private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (Async & Abort[Throwable]),
+      private[workflow] val paramHash: Maybe[Fingerprint] = Maybe.empty,
   ) extends Task[A]
 
   /** Build a [[Command]] task under the ambient [[TaskScope]]. Commands
@@ -636,45 +890,75 @@ object Task:
   )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Command[A] =
     command[A, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
 
-  /** CLI-driven [[Command]] — registers a leaf command that consumes CLI
-    * tokens via the implicit [[CommandArgs]] instance. The body receives
-    * the parsed `Args` value rather than the raw [[CommandContext]]. The
-    * CLI tokens are taken from `ctx.args.raw`, which the scheduler wires
-    * up from the surrounding `Workflow.runCli` call.
-    *
-    * Note: kept non-`inline` because the body references the package-private
-    * [[CommandArgsParseException]] carrier — inlining would expose that
-    * symbol to user call sites, which Scala 3 forbids.
-    */
-  def cli[Args, A](id: String, version: TaskVersion)(
-      body: Args => A,
-  )(using scope: TaskScope, parser: CommandArgs[Args]): Command[A] =
-    new Command[A](
-      TaskId.unsafe(scope.qualify(id).value),
-      version,
-      Nil,
-      (ctx, _) =>
-        parser.parse(ctx.args.raw.toSeq) match
-          case Result.Success(args) => body(args)
-          case Result.Failure(err)  =>
-            // Surface as Throwable; the scheduler wraps Throwable into
-            // WorkflowError.TaskFailed. `Workflow.runCli` re-extracts the
-            // original `CliParseError` from the carrier exception below.
-            throw new CommandArgsParseException(err)
-          case other =>
-            throw new RuntimeException(s"Unexpected CLI parse result: $other"),
-    )
+  // ─────────────── parameterized command (P does NOT need Hashable) ──────────
+  //
+  // Commands never consult or populate the cache, so the parameterized
+  // command variants don't require a `Hashable[P]` — `paramHash` remains
+  // `Maybe.empty` even with parameters. The factory returns `P => Command[A]`
+  // so `Cli.runWith` (and downstream callers) can apply parsed arguments.
 
-  /** CLI-driven [[Command]] (default version). */
-  def cli[Args, A](id: String)(
-      body: Args => A,
-  )(using scope: TaskScope, parser: CommandArgs[Args]): Command[A] =
-    cli[Args, A](id, TaskVersion.v1)(body)
-
-  /** Internal carrier so a [[CliParseError]] raised inside a CLI body can
-    * traverse the scheduler's Throwable channel and be re-projected as a
-    * typed `CliParseError` by [[Workflow.runCli]].
+  /** Parameterized [[Command]] (leaf). The returned `P => Command[A]` builds a
+    * Command whose body closes over the supplied `P`.
     */
-  private[workflow] final class CommandArgsParseException(val error: CliParseError)
-      extends RuntimeException(s"CLI parse failed: $error")
+  inline def command[A, P](inline id: String, version: TaskVersion)(
+      body: P => A < (Async & Abort[Throwable]),
+  )(using scope: TaskScope): P => Command[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      new Command[A](
+        taskId,
+        version,
+        Nil,
+        (_, _) => body(p),
+      )
+
+  /** Parameterized [[Command]] (leaf, default version). */
+  inline def command[A, P](inline id: String)(
+      body: P => A < (Async & Abort[Throwable]),
+  )(using scope: TaskScope): P => Command[A] =
+    command[A, P](id, TaskVersion.v1)(body)
+
+  /** Parameterized [[Command]] with 1 dep. */
+  inline def command[A, P, D1](inline id: String, version: TaskVersion)(
+      d1: Task[D1],
+  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using scope: TaskScope): P => Command[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      new Command[A](
+        taskId,
+        version,
+        Seq(d1),
+        (_, args) => body(p, args(0).asInstanceOf[D1]),
+      )
+
+  /** Parameterized [[Command]] with 1 dep (default version). */
+  inline def command[A, P, D1](inline id: String)(
+      d1: Task[D1],
+  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using scope: TaskScope): P => Command[A] =
+    command[A, P, D1](id, TaskVersion.v1)(d1)(body)
+
+  /** Parameterized [[Command]] with 2 deps. */
+  inline def command[A, P, D1, D2](inline id: String, version: TaskVersion)(
+      d1: Task[D1],
+      d2: Task[D2],
+  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+  ): P => Command[A] =
+    val taskId = TaskId.unsafe(scope.qualify(id).value)
+    (p: P) =>
+      new Command[A](
+        taskId,
+        version,
+        Seq(d1, d2),
+        (_, args) => body(p, args(0).asInstanceOf[D1], args(1).asInstanceOf[D2]),
+      )
+
+  /** Parameterized [[Command]] with 2 deps (default version). */
+  inline def command[A, P, D1, D2](inline id: String)(
+      d1: Task[D1],
+      d2: Task[D2],
+  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+      scope: TaskScope,
+  ): P => Command[A] =
+    command[A, P, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
 end Task

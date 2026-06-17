@@ -15,7 +15,7 @@ import kyo.*
   *   - A `compare` skill is a [[Task]] depending on two documents.
   *   - CLI entry points (`summariseCmd`, `compareCmd`) wrap the cached
   *     skills as [[Task.Command]]s so an agent harness can invoke them
-  *     through `Workflow.runCli`.
+  *     through `Workflow.run`.
   *
   * Skill bodies are intentionally stubbed (string concatenation, no LLM
   * call) — the point is the wiring shape, not real summarisation.
@@ -50,7 +50,7 @@ object Skills:
   /** CLI entry: invokes the cached `summarise` skill and returns its result.
     *
     * Wired as a [[Task.Command]] so the surrounding agent harness can call
-    * it through `Workflow.runCli` without the skill itself losing
+    * it through `Workflow.run` without the skill itself losing
     * memoisation.
     */
   val summariseCmd: Task.Command[String] = Task.command("summariseCmd")(summarise) { s => s }

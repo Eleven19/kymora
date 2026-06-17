@@ -25,17 +25,30 @@ private[workflow] object Hashing:
 
   /** inputsHash(task) = blake3(
     *   "kymora-workflow/v1" || task.id || bodyHash ||
-    *   join("|", deps.sortedBy(_.id.value).map(d => d.id || ":" || d.fingerprint))
+    *   join("|", deps.sortedBy(_.id.value).map(d => d.id || ":" || d.fingerprint)) ||
+    *   maybe(paramHash)
     * )
     *
     * Deps are sorted by id so declaration-order permutations don't change
     * the hash. The body executes deps in declaration order; this is
     * separate.
+    *
+    * `paramHash` is folded in only when present, so unparameterized tasks
+    * produce the same fingerprint they did before parameterization landed.
     */
-  def inputsHash(taskId: TaskId, bodyHash: Fingerprint, deps: Chunk[DepFingerprint]): Fingerprint =
+  def inputsHash(
+      taskId: TaskId,
+      bodyHash: Fingerprint,
+      deps: Chunk[DepFingerprint],
+      paramHash: Maybe[Fingerprint] = Maybe.empty,
+  ): Fingerprint =
     val sorted   = deps.toVector.sortBy(_.id.value)
     val depsPart = sorted.map(d => s"${d.id.value}:${d.fingerprint.value}").mkString("|")
-    val raw      = s"kymora-workflow/v1|${taskId.value}|${bodyHash.value}|$depsPart"
+    val paramPart = paramHash match
+      case kyo.Present(fp) => s"|param=${fp.value}"
+      case _               => ""
+    val raw      =
+      s"kymora-workflow/v1|${taskId.value}|${bodyHash.value}|$depsPart$paramPart"
     Fingerprint.ofBytes(Chunk.from(raw.getBytes))
 
 end Hashing
