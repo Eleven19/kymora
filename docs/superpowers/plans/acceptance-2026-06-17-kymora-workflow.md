@@ -33,61 +33,95 @@ suites are subsets of that target. Compile coverage is verified by
 
 ## Test totals (modules in this workspace)
 
+Updated after the v0.1 → v0.1-followups work landed (see the
+"Follow-up status" section below for the per-area summary).
+
 | Module | Suite | Tests | Pass | Fail |
 |---|---|---|---|---|
-| `kymora-workflow` | `kymora.workflow.jvm.test` | 137 | 137 | 0 |
+| `kymora-workflow` | `kymora.workflow.jvm.test` | 159 | 159 | 0 |
+| `kymora-workflow-testkit` | `kymora.workflow-testkit.jvm.test` | 26 | 26 | 0 |
 | `kymora-vfs` | `kymora.vfs.jvm.test` | 83 | 83 | 0 |
 | `kymora-examples` | `kymora.examples.jvm.test` | 6 | 6 | 0 |
 | `kymora-core` | `kymora.core.jvm.test` | 1 | 1 | 0 |
-| **Total** | — | **227** | **227** | **0** |
+| **Total** | — | **275** | **275** | **0** |
 
-Compile-only verification:
+Cross-platform verification beyond JVM:
 
 | Target | Result |
 |---|---|
-| `kymora.workflow.jvm.compile` | PASS |
+| `kymora.workflow.js.test` | PASS (159 tests green) |
+| `kymora.workflow-testkit.js.test` | PASS (26 tests green) |
 | `kymora.workflow.js.compile` | PASS |
 | `kymora.workflow.native.compile` | PASS |
-| `kymora.workflow-testkit.jvm.compile` | PASS |
+| `kymora.workflow-testkit.native.compile` | PASS |
 | `kymora.examples.jvm.compile` | PASS |
 | `kymora.core.jvm.compile` | PASS |
 | `kymora.vfs.jvm.compile` | PASS |
 
-## Known limitations / simplifications carried from the plan
+## Follow-up status (2026-06-17)
 
-These are documented in-plan and are expected to be lifted in a v1.x follow-up.
+Updates from the v0.1-followups branch. Items marked **CLOSED** are
+fully resolved on the `workflow-v0.1-followups` bookmark.
 
-- **Engine cross-run persistence (Phase 11, Task 44):** Within a single
-  `Workflow.run` invocation a cache HIT does not re-execute the body — but
-  the engine does not yet re-hydrate `.dest/` from a previous JVM run. A
-  separate process invocation will currently re-run the body.
-- **`Task.Persistent` execution (Phase 11, Task 45):** Implemented as
-  `Cached`-equivalent for v1. Real `.dest/` retention across separate runs
-  (the zinc-style use case in §14.1) is deferred.
-- **`verifyDest` (Phase 12, Task 49):** Flag is plumbed through `Config`
-  and `Cacheable`; the engine does not yet rehash `.dest/` on HIT.
-- **`Command.cli` parser (Phase 13, Task 50):** Resolved. The hand-rolled
-  `CommandArgs` factory + mainargs-shaped surface has been replaced by
-  parameterized `Task.command[A, P]` and `cli.Cli.runWith` backed by
-  kyo-case-app, which provides full `Parser` / `Help` derivation. Usage
-  banners come from case-app's `Help`. Closes #4 + #5.
-- **`Config.continueOnError` (Phase 12):** Shape-only — the scheduler does
-  not yet fan out failures.
-- **Cross-platform hashing (Phase 16):** Resolved — all three platforms
-  now share the pure-Scala `pt.kcry::blake3` implementation, producing
-  byte-identical BLAKE3 digests on JVM, Scala.js, and Scala Native. Cache
-  manifests written on one platform are valid on any other. The previous
-  FNV-1a fallback for JS/Native has been removed (closes #8).
-- **Error fields (Phase 6):** A few error variants carry `String` payloads
-  instead of `Throwable` so the error ADT remains `Schema`-derivable. The
-  engine wraps real exceptions at the boundary.
+### Closed since v0.1 baseline
 
-## Known intermittent flake
+| Issue | Title | Commit |
+|---|---|---|
+| #5 §3 | **CLOSED** — `Task.Source` uses VFS content hash, not path-string | `tsvvorvr` |
+| #5 §4 | **CLOSED** — mainargs derivation replaced by kyo-case-app via `Cli.runWith` | `rmtqnpzl` |
+| #5 §5 | **CLOSED** — multi-command CLI dispatch via `Cli.runCommands` + `CliParseError.UnknownCommand` | `rmtqnpzl` |
+| #5 §8 | **CLOSED** — BLAKE3 cross-platform via `pt.kcry::blake3` | `lstnqupo` |
+| #5 §9 | **CLOSED** — `kyo.Command` shadow sidestepped by consolidating all task kinds under `Task.<kind>` factories | `uutwknqs` |
+| #5 §10 | **CLOSED** — `Reporter` family renamed to `Observer` (also removes `kyo.test.TestReporter` shadow) | `oylwmuqr` |
+| #5 §11 | **CLOSED** — explicit `Schema` givens for opaque types | `xxtxunus` |
+| #5 §12 | **CLOSED** — `VfsDirStore.persistentLocks` scoped to `Impl` + `Semaphore`-backed `PersistentMutex` (Kyo-fiber-safe) | `kzlzvpnx`, `zruvktuo`, `ompukkyl` |
+| #7 | **CLOSED** — `WorkflowSpec` testkit base class with 3-min default per-test timeout | `qwmunmsx` |
 
-- `kymora.workflow.jvm.test` includes
-  `io.eleven19.kymora.workflow.store.VfsDirStoreTests."openPersistentWorkspace
-  retains content across calls"` (and a related
-  `InMemoryCacheStoreTests` test). Under parallel-suite load on macOS the
-  first pass timed out after 2 minutes; a sequential re-run completed in
-  ~24 s with 137 / 137 passing. Filed as a known flake — non-blocking for
-  acceptance.
+### Open (deferred to next follow-up cycle)
+
+- **#5 §1 cross-run value persistence:** scheduler treats any existing
+  manifest as HIT without comparing the stored inputs hash against the
+  recomputed one. The Source layer now contributes the right fingerprint
+  (per §3); the next step is wiring it through manifest equality.
+- **#5 §2 `Task.Persistent` `.dest/` retention:** structurally Cached;
+  real persistent workspace handoff to the body still deferred.
+- **#5 §6 fiber-per-node fan-out:** parallelism still bounded per node's
+  dep list. Whole-DAG fan-out is the next big scheduler refactor.
+- **#5 §7 `Config.continueOnError`:** field is observable but the
+  scheduler still fail-fasts on the first `TaskFailed`.
+
+### Net new in v0.1-followups (not tracked by an issue)
+
+- **`Task.Sources` (plural)** — Mill `Sources` analogue producing
+  ordered `Chunk[VPathRef]` from a `VPath*` vararg list, with an
+  order-sensitive aggregate fingerprint. `Task.sourcesQuick` mirrors
+  `Task.sourceQuick`. Wired into the scheduler, the dispatch table, and
+  the `Graph` walker. Lands as `vtktyymr`.
+- **`Workflow.Services` type alias** + companion. Splits service-like
+  dependencies (`Vfs`, `CacheStore`, `Observer`) off `Workflow.Config`
+  into separate `Env` effects; `Config` now carries pure run-level
+  configuration. `Services.Bundle` + `Services.{init,default,layer,provide}`
+  are the construction helpers. Lands as `yztwukmr`.
+- **Engine on Kyo's `Clock`/`Console` effects** — the five existing
+  `java.time.Instant.now()` call sites in `Scheduler` and the two
+  `System.out.println` call sites in `ConsoleObserver` / `JsonLinesObserver`
+  migrate to `Clock.now` / `Console.printLine` so `TestClock` and a
+  future capturing-console testkit can drive deterministic tests
+  without leaking real wall-clock time or stdout. Lands as `vtktyymr`.
+- **`ParseError` extends `RuntimeException`** with a structured
+  `description` + `detailedDescription: Maybe[String]` per variant
+  (carrying expected wire form / known-good values) so Schema `readFn`
+  callers throw a typed error and pattern-match consumers can read
+  either field directly. Lands as `pqwmznsp`.
+- **`TaskContext` trimmed** to a single `dest: VPath` field — the prior
+  `emit` / `clock` fields were threaded through but never read by any
+  body. Lands as `yqpoptur`.
+
+## Known intermittent flake (resolved)
+
+The earlier `openPersistentWorkspace retains content across calls`
+flake under heavy parallel mill load is **closed**: root cause was
+`ReentrantLock` thread-affinity under Kyo's fiber scheduler. Replaced
+with a `Semaphore(1, fair=true)`-backed `PersistentMutex` (JVM/Native;
+no-op on Scala.js for its single-event-loop model). The test now runs
+sub-second on every platform (`zruvktuo`, `ompukkyl`).

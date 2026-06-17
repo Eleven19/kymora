@@ -8,11 +8,14 @@ for the architecture and conventions.
 ## Key concepts
 
 - `Task[A]` — sealed trait. Variants: `Task.Cached`, `Task.Persistent`,
-  `Task.Source`, `Task.Input`, `Task.Command`. All built via
-  `Task.<kind>` smart constructors:
+  `Task.Source`, `Task.Sources`, `Task.Input`, `Task.Command`. All built
+  via `Task.<kind>` smart constructors:
   - `Task.cached` (canonical) / `Task.init` (alias) — cached
   - `Task.persistent` — persisted-output
-  - `Task.source` / `Task.sourceQuick` — file/dir input
+  - `Task.source` / `Task.sourceQuick` — single-path file input
+  - `Task.sources` / `Task.sourcesQuick` — multi-path (Mill `Sources`
+    analogue); produces an ordered `Chunk[VPathRef]` with an
+    order-sensitive aggregate fingerprint
   - `Task.input` — pure-value input
   - `Task.command` — always-runs command
 - **Parameterized variants:** `Task.cached[A, P]`, `Task.persistent[A, P]`,
@@ -22,17 +25,29 @@ for the architecture and conventions.
   against the same `TaskId`. Commands carry no `paramHash` (they never
   cache).
 - `Workflow.scope(prefix)` — definition-scope helper (compile-time validated).
-- `Workflow.Config` — runtime config injected via `Env[Workflow.Config]`.
-- `Workflow.run(goal)` / `runAll` — engine entry points.
+- `Workflow.Services` — aggregate type alias for the four `Env` effects
+  the engine reads:
+  `Env[Workflow.Config] & Env[Vfs] & Env[CacheStore] & Env[Observer]`.
+  - `Workflow.Config` carries pure run-level configuration (codec,
+    parallelism, flags). Service-like dependencies (`Vfs`, `CacheStore`,
+    `Observer`) are NOT on Config — they're separate Env effects so test
+    harnesses can swap them independently.
+  - `Workflow.Services.Bundle` + `Services.init` / `Services.default` /
+    `Services.layer.{config,vfs,store,observer}` / `Services.provide`
+    are the construction helpers.
+- `Workflow.run(goal)` / `runAll(goals*)` — engine entry points;
+  signatures take `Async & Workflow.Services & Abort[WorkflowError]`.
 - `io.eleven19.kymora.workflow.cli.Cli.runWith(task, tokens)` — bridges
   [kyo-case-app](https://github.com/getkyo/kyo) argument parsing to
   parameterized commands. Provide a case class with `caseapp.Parser` /
   `caseapp.Help` instances in scope, build the command via
   `Task.command[A, Args]("name") { args => ... }`, then run with
-  `Cli.runWith(cmd, args)` inside a `Workflow.Config` `Env`.
+  `Cli.runWith(cmd, args)` under the ambient `Workflow.Services`.
 - `CacheStore` — pluggable persistence. Default: `VfsDirStore` backed by
   `kymora-vfs`.
-- `WorkflowEvent` + `Observer` — observability stream.
+- `WorkflowEvent` + `Observer` — observability stream. The default
+  `ConsoleObserver` / `JsonLinesObserver` write through Kyo's `Console`
+  effect (not `System.out`) so a test runner can capture output.
 
 ## Examples
 
