@@ -87,4 +87,62 @@ class VfsDirStoreTests extends Test[Any]:
       _     <- store.remove(CacheKey("nothing"))
     yield assert(true)
   }
+  "openWorkspace returns a fresh .dest.tmp path" in {
+    for
+      vfs   <- Vfs.inMemory.init
+      root   = VPath("cache")
+      store <- VfsDirStore.init(root, vfs)
+      _ <- Scope.run {
+        store.openWorkspace(CacheKey("compile")).map { dest =>
+          assert(dest.show.endsWith(".dest.tmp"))
+        }
+      }
+    yield ()
+  }
+  "openWorkspace dir is removed when Scope exits without seal" in {
+    for
+      vfs   <- Vfs.inMemory.init
+      root   = VPath("cache")
+      store <- VfsDirStore.init(root, vfs)
+      destPath <- Scope.run {
+        for
+          dest <- store.openWorkspace(CacheKey("compile"))
+          _    <- vfs.writeBytes(dest / "file.txt", Span.from("x".getBytes), createFolders = true)
+        yield dest
+      }
+      stillThere <- vfs.exists(destPath)
+    yield assert(!stillThere)
+  }
+  "openPersistentWorkspace returns the .dest path directly" in {
+    for
+      vfs   <- Vfs.inMemory.init
+      root   = VPath("cache")
+      store <- VfsDirStore.init(root, vfs)
+      _ <- Scope.run {
+        store.openPersistentWorkspace(CacheKey("persistent.foo")).map { dest =>
+          assert(dest.show.endsWith(".dest"))
+          assert(!dest.show.endsWith(".dest.tmp"))
+        }
+      }
+    yield ()
+  }
+  "openPersistentWorkspace retains content across calls" in {
+    for
+      vfs   <- Vfs.inMemory.init
+      root   = VPath("cache")
+      store <- VfsDirStore.init(root, vfs)
+      _ <- Scope.run {
+        for
+          dest <- store.openPersistentWorkspace(CacheKey("p"))
+          _    <- vfs.writeBytes(dest / "marker", Span.from("kept".getBytes), createFolders = true)
+        yield ()
+      }
+      _ <- Scope.run {
+        for
+          dest  <- store.openPersistentWorkspace(CacheKey("p"))
+          bytes <- vfs.readBytes(dest / "marker")
+        yield assert(bytes.toArray.sameElements("kept".getBytes))
+      }
+    yield ()
+  }
 end VfsDirStoreTests

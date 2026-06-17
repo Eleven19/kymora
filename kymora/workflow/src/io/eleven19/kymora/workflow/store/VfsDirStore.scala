@@ -15,6 +15,16 @@ import kyo.*
   */
 object VfsDirStore:
 
+  /** Process-wide per-key locks for [[Impl.openPersistentWorkspace]].
+    *
+    * Keyed by `CacheKey.value`. Real cross-process advisory locking would
+    * need an OS file lock; this in-process map is enough for v1 correctness
+    * inside a single JVM and is shared across all `VfsDirStore` instances
+    * built from this object.
+    */
+  private val persistentLocks =
+    new java.util.concurrent.ConcurrentHashMap[String, java.util.concurrent.locks.ReentrantLock]()
+
   /** Constructs a `CacheStore` rooted at `root` inside `vfs`. */
   def init(root: VPath, vfs: Vfs)(using Frame): CacheStore < (Async & Abort[StoreError]) =
     new Impl(root, vfs)
@@ -45,6 +55,21 @@ object VfsDirStore:
     if parts.isEmpty then root / ".dest"
     else
       val leaf     = parts.last + ".dest"
+      val dirParts = parts.dropRight(1)
+      val parent   = dirParts.foldLeft(root)((p, seg) => p / seg)
+      parent / leaf
+
+  /** Builds the path to the `<key>.dest.tmp/` staging workspace.
+    *
+    * This sibling-of-`.dest` location is where a `Task.Cached` body writes
+    * its outputs. On success the engine atomically renames it to `.dest/`;
+    * on failure the surrounding [[Scope]] finalizer removes it.
+    */
+  private def destTmpPath(root: VPath, key: CacheKey)(using Frame): VPath =
+    val parts = key.value.split('/').toVector.filter(_.nonEmpty)
+    if parts.isEmpty then root / ".dest.tmp"
+    else
+      val leaf     = parts.last + ".dest.tmp"
       val dirParts = parts.dropRight(1)
       val parent   = dirParts.foldLeft(root)((p, seg) => p / seg)
       parent / leaf
@@ -136,10 +161,38 @@ object VfsDirStore:
             Scope.run(vfs.walk(root).run).map: entries =>
               entries.flatMap(toCacheKey(root, _)).filter(_.value.startsWith(prefix))
 
+    /** Returns a fresh `<root>/<key>.dest.tmp/` staging path for a
+      * `Task.Cached` body.
+      *
+      * The returned path is registered with the current [[Scope]] so that
+      * an unsealed workspace (i.e. exception or failure before the engine
+      * renames it to `.dest/`) is removed on scope exit. Sealing is the
+      * engine's responsibility and is not implemented here.
+      */
     def openWorkspace(key: CacheKey): VPath < (Async & Scope & Abort[StoreError]) =
-      Abort.fail(StoreError.IoFailure(root.show, "openWorkspace not yet implemented"))
+      val p = destTmpPath(root, key)
+      Abort.recover[VfsError](e => Abort.fail(StoreError.fromThrowable(p.show, e))):
+        Scope.ensure(Abort.run(vfs.removeAll(p))).andThen(p)
 
+    /** Returns the in-place `<root>/<key>.dest/` directory for a
+      * `Task.Persistent` body.
+      *
+      * Acquires a process-wide advisory lock keyed by `key.value` and
+      * releases it on [[Scope]] exit. The directory itself is NOT
+      * removed — persistence is the entire point of this workspace.
+      */
     def openPersistentWorkspace(key: CacheKey): VPath < (Async & Scope & Abort[StoreError]) =
-      Abort.fail(StoreError.IoFailure(root.show, "openPersistentWorkspace not yet implemented"))
+      val p = destPath(root, key)
+      Abort.recover[VfsError](e => Abort.fail(StoreError.fromThrowable(p.show, e))):
+        Sync.defer {
+          val lock = persistentLocks.computeIfAbsent(
+            key.value,
+            _ => new java.util.concurrent.locks.ReentrantLock()
+          )
+          lock.lock()
+          lock
+        }.map { lock =>
+          Scope.ensure(Sync.defer(lock.unlock())).andThen(p)
+        }
   end Impl
 end VfsDirStore
