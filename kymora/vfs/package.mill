@@ -14,12 +14,7 @@ trait VfsModule extends _root_.build.CommonScalaModule
     )
 }
 
-trait VfsJSModule extends VfsModule with _root_.build.CommonScalaJSModule {
-
-    override def moduleKind: T[mill.scalajslib.api.ModuleKind] = Task {
-        mill.scalajslib.api.ModuleKind.CommonJSModule
-    }
-}
+trait VfsJSModule extends VfsModule with _root_.build.CommonScalaJSModule
 
 object jvm extends VfsModule {
     override def moduleDeps = Seq(build.kymora.core.jvm)

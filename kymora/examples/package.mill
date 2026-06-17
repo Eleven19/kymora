@@ -1,0 +1,37 @@
+package build.kymora.examples
+
+import mill.*, scalalib.*
+
+trait ExamplesModule extends _root_.build.CommonScalaModule {
+
+    override def artifactName = "kymora-examples"
+
+    override def moduleDeps = Seq(
+        build.kymora.workflow.jvm,
+        build.kymora.vfs.jvm
+    )
+
+    // moduleDir for `jvm` is `kymora/examples/jvm`. One `os.up` takes us back
+    // to `kymora/examples`, then we point at the shared `src` directory
+    // (JVM-only example modules don't need platform-suffixed source trees).
+    override def sources = Task.Sources(
+        moduleDir / os.up / "src"
+    )
+}
+
+trait ExamplesTestModule extends _root_.build.CommonScalaTestModule {
+
+    // moduleDir for `jvm.test` is `kymora/examples/jvm/test`. Two `os.up`s
+    // take us back to `kymora/examples`, then we point at the shared
+    // `test/src` directory (JVM-only example modules don't need
+    // platform-suffixed source trees).
+    override def sources = Task.Sources(
+        moduleDir / os.up / os.up / "test" / "src"
+    )
+}
+
+object jvm extends ExamplesModule {
+    object test extends ScalaTests with ExamplesTestModule with _root_.build.KyoTestModule {
+        override def moduleDeps = super.moduleDeps :+ build.kymora.`workflow-testkit`.jvm
+    }
+}

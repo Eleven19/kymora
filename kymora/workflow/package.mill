@@ -1,0 +1,48 @@
+package build.kymora.workflow
+
+import mill.*, scalalib.*, scalajslib.*, scalanativelib.*
+
+trait WorkflowModule extends _root_.build.CommonScalaModule
+    with _root_.build.KymoraPlatformScalaModule
+    with _root_.build.PublishSupport {
+
+    override def artifactName = "kymora-workflow"
+
+    def mvnDeps = Seq(
+        mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-case-app::${_root_.build.KymoraVersions.Kyo}",
+        // Pure-Scala BLAKE3 — cross-platform (JVM / Scala.js / Scala Native)
+        // via `%%%`. Used by the engine's `Fingerprint` primitive so cache
+        // manifests are byte-identical across platforms.
+        mvn"pt.kcry::blake3::3.1.2"
+    )
+}
+
+trait WorkflowTestModule extends _root_.build.CommonScalaTestModule {
+
+    override def sources = Task.Sources(
+        moduleDir / os.up / "test" / "src"
+    )
+}
+
+object jvm extends WorkflowModule {
+    override def moduleDeps = Seq(build.kymora.vfs.jvm)
+    object test extends ScalaTests with WorkflowTestModule with _root_.build.KyoTestModule {
+        override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.jvm)
+    }
+}
+
+object js extends WorkflowModule with _root_.build.CommonScalaJSModule {
+    override def moduleDeps = Seq(build.kymora.vfs.js)
+    object test extends ScalaJSTests with WorkflowTestModule with _root_.build.KyoTestJSModule {
+        override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.js)
+    }
+}
+
+object native extends WorkflowModule with _root_.build.CommonScalaNativeModule {
+    override def moduleDeps = Seq(build.kymora.vfs.native)
+    object test extends ScalaNativeTests with WorkflowTestModule with _root_.build.KyoTestNativeModule {
+        override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.native)
+    }
+}
