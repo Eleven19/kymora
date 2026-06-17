@@ -5,31 +5,31 @@ import io.eleven19.kymora.vfs.Vfs
 import kyo.*
 import kyo.test.*
 
-class VfsPathRefTests extends Test[Any]:
+class VPathRefTests extends Test[Any]:
   "render produces vref:v0c:<fp>:<path> for content hash" in {
-    val r = VfsPathRef(VPath("a/b/c"), Fingerprint.unsafe("blake3:abcd"), quick = false)
-    assert(VfsPathRef.render(r) == "vref:v0c:blake3:abcd:a/b/c")
+    val r = VPathRef(VPath("a/b/c"), Fingerprint.unsafe("blake3:abcd"), quick = false)
+    assert(VPathRef.render(r) == "vref:v0c:blake3:abcd:a/b/c")
   }
   "render produces vref:v0q:... for quick hash" in {
-    val r = VfsPathRef(VPath("x"), Fingerprint.unsafe("blake3:1"), quick = true)
-    assert(VfsPathRef.render(r) == "vref:v0q:blake3:1:x")
+    val r = VPathRef(VPath("x"), Fingerprint.unsafe("blake3:1"), quick = true)
+    assert(VPathRef.render(r) == "vref:v0q:blake3:1:x")
   }
   "parse round-trips render" in {
-    val r = VfsPathRef(VPath("a/b/c"), Fingerprint.unsafe("blake3:abcd"), quick = false)
-    val s = VfsPathRef.render(r)
-    assert(VfsPathRef.parse(s) == Result.succeed(r))
+    val r = VPathRef(VPath("a/b/c"), Fingerprint.unsafe("blake3:abcd"), quick = false)
+    val s = VPathRef.render(r)
+    assert(VPathRef.parse(s) == Result.succeed(r))
   }
   "parse preserves colons in path component" in {
-    val r = VfsPathRef.parse("vref:v0c:blake3:a:dir:with:colons")
+    val r = VPathRef.parse("vref:v0c:blake3:a:dir:with:colons")
     assert(r.toMaybe.exists(_.path.show == "dir:with:colons"))
   }
   "parse fails on unknown tag" in {
-    val r = VfsPathRef.parse("vref:v0z:blake3:a:b")
-    assert(r == Result.fail(ParseError.UnknownVfsPathRefTag("v0z")))
+    val r = VPathRef.parse("vref:v0z:blake3:a:b")
+    assert(r == Result.fail(ParseError.UnknownVPathRefTag("v0z")))
   }
   "Schema encodes as single string" in {
-    val r = VfsPathRef(VPath("a"), Fingerprint.unsafe("blake3:b"), quick = false)
-    val s = summon[Schema[VfsPathRef]].encodeString[Json](r)
+    val r = VPathRef(VPath("a"), Fingerprint.unsafe("blake3:b"), quick = false)
+    val s = summon[Schema[VPathRef]].encodeString[Json](r)
     assert(s == "\"vref:v0c:blake3:b:a\"")
   }
   "of(path) hashes file contents" in {
@@ -37,7 +37,7 @@ class VfsPathRefTests extends Test[Any]:
     for
       fs <- Vfs.inMemory.init
       _  <- fs.write(path, "hello\n")
-      r  <- VfsPathRef.of(path, fs)
+      r  <- VPathRef.of(path, fs)
     yield
       assert(!r.quick)
       assert(r.path == path)
@@ -48,7 +48,7 @@ class VfsPathRefTests extends Test[Any]:
     for
       fs <- Vfs.inMemory.init
       _  <- fs.write(path, "anything")
-      r  <- VfsPathRef.quick(path, fs)
+      r  <- VPathRef.quick(path, fs)
     yield assert(r.quick)
   }
   "two paths with identical content produce equal fingerprints (content mode)" in {
@@ -58,8 +58,8 @@ class VfsPathRefTests extends Test[Any]:
       fs <- Vfs.inMemory.init
       _  <- fs.write(pa, "same")
       _  <- fs.write(pb, "same")
-      a  <- VfsPathRef.of(pa, fs)
-      b  <- VfsPathRef.of(pb, fs)
+      a  <- VPathRef.of(pa, fs)
+      b  <- VPathRef.of(pb, fs)
     yield assert(a.fingerprint == b.fingerprint)
   }
-end VfsPathRefTests
+end VPathRefTests

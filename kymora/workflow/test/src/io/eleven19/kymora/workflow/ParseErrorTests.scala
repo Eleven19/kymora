@@ -9,10 +9,10 @@ class ParseErrorTests extends Test[Any]:
     val b = ParseError.MalformedTaskVersion("x")
     assert(a == b)
   }
-  "MalformedVfsPathRef CanEqual comparison" in {
-    assert(ParseError.MalformedVfsPathRef("y") == ParseError.MalformedVfsPathRef("y"))
+  "MalformedVPathRef CanEqual comparison" in {
+    assert(ParseError.MalformedVPathRef("y") == ParseError.MalformedVPathRef("y"))
   }
-  "UnknownVfsPathRefTag CanEqual comparison" in {
-    assert(ParseError.UnknownVfsPathRefTag("v0z") == ParseError.UnknownVfsPathRefTag("v0z"))
+  "UnknownVPathRefTag CanEqual comparison" in {
+    assert(ParseError.UnknownVPathRefTag("v0z") == ParseError.UnknownVPathRefTag("v0z"))
   }
 end ParseErrorTests
