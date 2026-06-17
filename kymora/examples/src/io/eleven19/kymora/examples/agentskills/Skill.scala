@@ -13,7 +13,7 @@ type Skill[A] = Task[A]
 /** Convention helper: scope skills under the `"agent"` prefix.
   *
   * Importing `SkillScope.default` brings a `given TaskScope` into scope so
-  * that every `Skill.init` / `Task.init` / `Command.init` invocation lands
+  * that every `Task.init` / `Task.command` / `Task.input` invocation lands
   * under `agent.<id>` without per-call wiring.
   */
 object SkillScope:

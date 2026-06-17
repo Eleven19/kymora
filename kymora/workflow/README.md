@@ -8,7 +8,13 @@ for the architecture and conventions.
 ## Key concepts
 
 - `Task[A]` — sealed trait. Variants: `Task.Cached`, `Task.Persistent`,
-  `Task.Source`, `Task.Input`, `Task.Command`.
+  `Task.Source`, `Task.Input`, `Task.Command`. All built via
+  `Task.<kind>` smart constructors:
+  - `Task.init` — cached
+  - `Task.persistent` — persisted-output
+  - `Task.source` / `Task.sourceQuick` — file/dir input
+  - `Task.input` — pure-value input
+  - `Task.command` / `Task.cli[Args]` — always-runs command
 - `Workflow.scope(prefix)` — definition-scope helper (compile-time validated).
 - `Workflow.Config` — runtime config injected via `Env[Workflow.Config]`.
 - `Workflow.run(goal)` / `runAll` / `runCli` — engine entry points.
@@ -30,3 +36,11 @@ See [`kymora-examples`](../examples) for:
 See [`kymora-workflow-testkit`](../workflow-testkit) for `WorkflowTestDriver`,
 `TestClock`, `TestReporter`, `InMemoryCacheStore`, and `TaskBuilder`
 ObjectMothers.
+
+## Gotchas
+
+- **Always construct tasks via `Task.<kind>`.** There are no top-level
+  `Source` / `Input` / `Command` / `Cmd` aliases — every kind is reached
+  through `Task.init`, `Task.persistent`, `Task.source`, `Task.input`,
+  `Task.command`, or `Task.cli[Args]`. This sidesteps the `kyo.Command`
+  shadow that `import kyo.*` introduces.

@@ -34,4 +34,12 @@ class TaskCachedTests extends Test[Any]:
     assert(cached.deps.size == 6)
     (0 until 6).foreach(i => assert(cached.deps(i).eq(ds(i))))
   }
+  "Task.cached is the canonical name; Task.init is an alias" in {
+    val a = Task.cached("ca")(42)
+    val b = Task.init("cb")(42)
+    assert(a.isInstanceOf[Task.Cached[?]])
+    assert(b.isInstanceOf[Task.Cached[?]])
+    assert(a.version == TaskVersion.v1)
+    assert(b.version == TaskVersion.v1)
+  }
 end TaskCachedTests

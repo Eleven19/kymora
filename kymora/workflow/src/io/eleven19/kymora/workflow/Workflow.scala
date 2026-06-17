@@ -6,16 +6,11 @@ import io.eleven19.kymora.workflow.store.*
 import io.eleven19.kymora.vfs.*
 import kyo.*
 
-// `kyo.*` re-exports its own `Command` type which would shadow the package-
-// level `Command` alias under the wildcard import. Pin our alias back so
-// `runCli`'s `cmd: Command[A]` parameter resolves to the workflow Command.
-import io.eleven19.kymora.workflow.Command
-
 object Workflow:
   /** Definition-scope helper.
     *
     * Compile-time validated literal prefix. Threads a using TaskScope so all
-    * Task.init / Source.init / Input.init / Command.init invocations inside
+    * Task.init / Task.source / Task.input / Task.command invocations inside
     * `body` see the qualified prefix.
     *
     * Resource scopes (cache lock, reporter session, etc.) use Kyo's Scope
@@ -107,7 +102,7 @@ object Workflow:
     yield ()
 
   /** Internal carrier for CLI tokens, threaded through the scheduler so a
-    * `Command.cli` body can pull them out of its [[CommandContext]].
+    * `Task.cli` body can pull them out of its [[CommandContext]].
     *
     * Public surface is intentionally tiny: only [[runCli]] populates a real
     * value here; everything else (plain [[run]] / [[runAll]]) uses the empty
@@ -117,15 +112,15 @@ object Workflow:
   private[workflow] object CliTokens:
     val empty: CliTokens = CliTokens(Chunk.empty[String])
 
-  /** Run a single [[Command]] against a list of CLI tokens.
+  /** Run a single [[Task.Command]] against a list of CLI tokens.
     *
     * Threads the tokens into the scheduler via the [[CliTokens]] Env so the
-    * `Command.cli`-built body sees them on its `CommandContext.args.raw`.
+    * `Task.cli`-built body sees them on its `CommandContext.args.raw`.
     * Parse errors raised inside the body via
-    * [[Command.CommandArgsParseException]] are caught and re-projected as a
+    * [[Task.CommandArgsParseException]] are caught and re-projected as a
     * typed [[CliParseError]] on the error channel.
     */
-  def runCli[A](cmd: Command[A], tokens: Seq[String])(using
+  def runCli[A](cmd: Task.Command[A], tokens: Seq[String])(using
       Frame,
   ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError | CliParseError]) =
     val carrier = CliTokens(Chunk.from(tokens))

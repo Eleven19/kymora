@@ -4,13 +4,9 @@ import io.eleven19.kymora.workflow.testkit.*
 import kyo.*
 import kyo.test.*
 
-// `kyo.*` re-exports a `Command` of its own that would shadow our package's
-// `Command` alias under a wildcard import, so pin it back explicitly here.
-import io.eleven19.kymora.workflow.Command
-
 class CommandEngineTests extends Test[Any]:
-  "Command.init leaf runs its body and returns the value" in {
-    val goal = Command.init("run")("hello")
+  "Task.command leaf runs its body and returns the value" in {
+    val goal = Task.command("run")("hello")
     for
       driver <- WorkflowTestDriver.init
       result <- Env.run(driver.config)(driver.run(goal))
@@ -18,7 +14,7 @@ class CommandEngineTests extends Test[Any]:
   }
   "Command body runs on every invocation (no caching)" in {
     val count = new java.util.concurrent.atomic.AtomicInteger(0)
-    val goal  = Command.init("run") { val _ = count.incrementAndGet(); 42 }
+    val goal  = Task.command("run") { val _ = count.incrementAndGet(); 42 }
     for
       driver <- WorkflowTestDriver.init
       _      <- Env.run(driver.config)(driver.run(goal))
@@ -30,7 +26,7 @@ class CommandEngineTests extends Test[Any]:
     val depCount = new java.util.concurrent.atomic.AtomicInteger(0)
     val cmdCount = new java.util.concurrent.atomic.AtomicInteger(0)
     val dep      = Task.init("dep") { val _ = depCount.incrementAndGet(); 10 }
-    val goal     = Command.init("run")(dep) { x =>
+    val goal     = Task.command("run")(dep) { x =>
       val _ = cmdCount.incrementAndGet(); x + 1
     }
     for

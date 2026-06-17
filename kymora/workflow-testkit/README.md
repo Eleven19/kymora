@@ -33,3 +33,12 @@ for
   events <- driver.events
 yield (result, events)
 ```
+
+## Gotchas
+
+- **`kyo.*` shadows workflow names under wildcard imports.** Construct
+  tasks via `Task.<kind>` (`Task.command`, `Task.source`, `Task.input`, …)
+  to dodge the `kyo.Command` shadow — see the workflow module README. A
+  similar caveat applies to `TestReporter` in test code if you `import
+  kyo.*` alongside the testkit; pin the name explicitly with
+  `import io.eleven19.kymora.workflow.testkit.TestReporter` when needed.

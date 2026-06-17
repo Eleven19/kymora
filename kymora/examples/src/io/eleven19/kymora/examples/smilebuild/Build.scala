@@ -35,7 +35,7 @@ object Build:
     * The body returns a one-line descriptor — a real-world CLI would dispatch
     * on a sub-command and trigger the appropriate `Workflow.run` over one of
     * the module tasks. */
-  val cli: Command[String] = Command.cli[Unit, String]("cli") { _ =>
+  val cli: Task.Command[String] = Task.cli[Unit, String]("cli") { _ =>
     "smile-build CLI: targets = [core.compile, core.jar, app.compile, app.jar]"
   }
 

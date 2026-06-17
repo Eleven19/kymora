@@ -53,12 +53,12 @@ object TaskBuilder:
     Diamond(head, mids, tail)
 
   /** A Source + Input + Task.Cached chain: compile depends on (source, input). */
-  final case class SourceInputChain(source: Source, input: Input[String], compile: Task[Int])
+  final case class SourceInputChain(source: Task.Source, input: Task.Input[String], compile: Task[Int])
 
   val sourceInputChain: SourceInputChain =
     given TaskScope = TaskScope("siChain")
-    val src = Source.init("source")(VPath("repo", "src"))
-    val ver = Input.init[String]("input")("3.8.4")
+    val src = Task.source("source")(VPath("repo", "src"))
+    val ver = Task.input[String]("input")("3.8.4")
     val cmp = Task.init("compile")(src, ver)((_, _) => 0)
     SourceInputChain(src, ver, cmp)
 end TaskBuilder

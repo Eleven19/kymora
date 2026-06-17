@@ -5,9 +5,6 @@ import io.eleven19.kymora.workflow.testkit.*
 import kyo.*
 import kyo.test.*
 
-// Pin our `Command` alias to defend against the `kyo.*` re-export shadow.
-import io.eleven19.kymora.workflow.Command
-
 final case class TestArgs(port: Int)
 object TestArgs:
   given parser: CommandArgs[TestArgs] = CommandArgs.from(
@@ -23,14 +20,14 @@ object TestArgs:
 
 class RunCliTests extends Test[Any]:
   "Workflow.runCli passes parsed args to body" in {
-    val cmd = Command.cli[TestArgs, String]("serve") { args => s"port=${args.port}" }
+    val cmd = Task.cli[TestArgs, String]("serve") { args => s"port=${args.port}" }
     for
       driver <- WorkflowTestDriver.init
       result <- Env.run(driver.config)(Workflow.runCli(cmd, Seq("--port", "8080")))
     yield assert(result == "port=8080")
   }
   "Workflow.runCli surfaces CliParseError on bad input" in {
-    val cmd = Command.cli[TestArgs, String]("serve") { _ => "ok" }
+    val cmd = Task.cli[TestArgs, String]("serve") { _ => "ok" }
     for
       driver  <- WorkflowTestDriver.init
       attempt <- Abort.run[CliParseError | WorkflowError](

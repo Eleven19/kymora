@@ -5,21 +5,21 @@ import kyo.*
 import kyo.test.*
 
 class SourceTests extends Test[Any]:
-  "Source.init records the path and uses content hashing by default" in {
+  "Task.source records the path and uses content hashing by default" in {
     val p = VPath("repo", "src")
-    val s = Source.init("src")(p)
+    val s = Task.source("src")(p)
     assert(s.id == TaskId("src"))
     assert(!s.quick)
   }
-  "Source.quick sets the quick flag" in {
+  "Task.sourceQuick sets the quick flag" in {
     val p = VPath("repo", "src")
-    val s = Source.quick("src")(p)
+    val s = Task.sourceQuick("src")(p)
     assert(s.quick)
   }
-  "Source.init prepends TaskScope" in {
+  "Task.source prepends TaskScope" in {
     given TaskScope = TaskScope("kymora.vfs.jvm")
     val p           = VPath("repo", "src")
-    val s           = Source.init("sources")(p)
+    val s           = Task.source("sources")(p)
     assert(s.id == TaskId("kymora.vfs.jvm.sources"))
   }
 end SourceTests

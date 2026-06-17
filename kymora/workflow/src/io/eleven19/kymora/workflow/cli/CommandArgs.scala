@@ -6,10 +6,10 @@ import kyo.*
 /** Typeclass for parsing CLI argument tokens into a user-defined `Args` type.
   *
   * The engine summons one of these via the implicit constraint on
-  * [[Command.cli]]; whoever defines the `Args` shape provides the parser.
+  * `Task.cli`; whoever defines the `Args` shape provides the parser.
   *
   * Two construction paths are provided today:
-  *   - The `unit` instance below covers `Command.cli[Unit, A]` (no args).
+  *   - The `unit` instance below covers `Task.cli[Unit, A]` (no args).
   *   - `CommandArgs.from(parse, usage)` is a manual escape hatch for ad-hoc
   *     parsers — used by tests and by hand-rolled CLI surfaces.
   *
