@@ -2,6 +2,7 @@ package io.eleven19.kymora.workflow.internal
 
 import io.eleven19.kymora.workflow.*
 import io.eleven19.kymora.workflow.store.*
+import io.eleven19.kymora.vfs.Vfs
 import kyo.*
 
 /** Minimum-viable scheduler for plan Tasks 44-47.
@@ -126,22 +127,30 @@ private[workflow] object Scheduler:
   // Source / Input
   // ---------------------------------------------------------------------
 
-  /** Source nodes: re-evaluated each run. In this initial slice we do not
-    * touch the VFS — we use a sentinel valueHash derived from the path
-    * string. Real content/quick hashing via `VPathRef.of` / `.quick` lands
-    * alongside the VFS-injection work in plan Task 45+.
+  /** Source nodes: re-evaluated each run. Reads the file contents via the
+    * ambient `Env[Vfs]` and produces a [[VPathRef]] whose fingerprint is
+    * either the content hash ([[VPathRef.of]]) or the cheaper size+mtime
+    * quick hash ([[VPathRef.quick]]), selected by `src.quick`.
+    *
+    * Downstream tasks depending on the source see the actual content hash
+    * change when the file's bytes change — that's how Source invalidates
+    * cached downstream tasks.
     */
   private def runSource(
       src: Task.Source,
       observer: Observer,
-  )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
+  )(using Frame): NodeResult < (Async & Env[Vfs] & Abort[WorkflowError]) =
     val started = java.time.Instant.now()
-    val pathHash =
-      Fingerprint.ofBytes(Chunk.from(s"source:${src.path.show}".getBytes))
     for
-      _ <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started))
-      _ <- observer.onEvent(WorkflowEvent.TaskCompleted(src.id, pathHash, 0L))
-    yield NodeResult(VPathRef(src.path, pathHash, quick = src.quick), pathHash)
+      vfs   <- Env.get[Vfs]
+      _     <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started))
+      ref   <- runBody[VPathRef](
+                 src.id,
+                 if src.quick then VPathRef.quick(src.path, vfs)
+                 else VPathRef.of(src.path, vfs),
+               )
+      _     <- observer.onEvent(WorkflowEvent.TaskCompleted(src.id, ref.fingerprint, 0L))
+    yield NodeResult(ref, ref.fingerprint)
   end runSource
 
   /** Input nodes: run the `read` thunk and hash the value via the embedded

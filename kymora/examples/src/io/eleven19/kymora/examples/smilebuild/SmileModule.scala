@@ -34,9 +34,10 @@ abstract class SmileModule(val name: String, val deps: Seq[SmileModule] = Seq.em
 
   private given TaskScope = TaskScope.unsafe(s"smile.$name")
 
-  /** Synthetic source directory at `repo/<name>/src`. The VFS path does not
-    * need to physically exist — [[Task.Source]] hashes the path string in
-    * this slice of the engine. */
+  /** Synthetic source directory at `repo/<name>/src`. [[Task.Source]] reads
+    * the bytes at this path through the ambient `Env[Vfs]` and content-hashes
+    * them, so a test or caller is expected to seed the file before running
+    * the build graph (see `SmileBuildTests.seedSources`). */
   val sources: Task.Source = Task.source("sources")(VPath("repo", name, "src"))
 
   /** Stub compilation step. Returns a descriptor string of the form
