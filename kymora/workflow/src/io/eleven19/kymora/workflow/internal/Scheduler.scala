@@ -63,16 +63,33 @@ private[workflow] object Scheduler:
       deps: Chunk[Task[?]],
       memo: AtomicRef[Map[TaskId, NodeResult]],
       cfg: Workflow.Config,
-  )(using Frame): Chunk[NodeResult] < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+  )(using
+      Frame,
+  ): Chunk[NodeResult] < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     if cfg.parallelism <= 1 || deps.size <= 1 then
       Kyo.foreach(deps)(d => runNode(d, memo))
     else
       Async.foreach(deps, cfg.parallelism)(d => runNode(d, memo))
 
-  /** Execute a single goal under the ambient `Workflow.Config`. */
+  /** Execute a single goal under the ambient `Workflow.Config`.
+    *
+    * Wraps the run with a default-empty [[Workflow.CliTokens]] Env so plain
+    * `Workflow.run` (no CLI on the stack) satisfies the scheduler's Env
+    * requirements. [[Workflow.runCli]] supplies a populated `CliTokens` via
+    * [[executeWithTokens]].
+    */
   def execute[A](goal: Task[A])(using
       Frame,
   ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+    Env.run(Workflow.CliTokens.empty)(executeWithTokens(goal))
+
+  /** Same as [[execute]] but expects the caller to supply the [[CliTokens]]
+    * value via its own `Env.run`. Used by [[Workflow.runCli]] so the CLI
+    * token list reaches the `Command` body's [[CommandContext]].
+    */
+  def executeWithTokens[A](goal: Task[A])(using
+      Frame,
+  ): A < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     Graph.collect(Seq(goal)) match
       case Left(err)  => Abort.fail(err)
       case Right(_)   =>
@@ -85,7 +102,9 @@ private[workflow] object Scheduler:
   private def runNode(
       task: Task[?],
       memo: AtomicRef[Map[TaskId, NodeResult]],
-  )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+  )(using
+      Frame,
+  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     memo.get.map { current =>
       current.get(task.id) match
         case Some(existing) => (existing: NodeResult)
@@ -102,7 +121,9 @@ private[workflow] object Scheduler:
   private def runFreshNode(
       task: Task[?],
       memo: AtomicRef[Map[TaskId, NodeResult]],
-  )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+  )(using
+      Frame,
+  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     Env.use[Workflow.Config] { cfg =>
       for
         _      <- cfg.reporter.onEvent(WorkflowEvent.TaskQueued(task.id))
@@ -163,7 +184,9 @@ private[workflow] object Scheduler:
       task: Task.Cached[?],
       memo: AtomicRef[Map[TaskId, NodeResult]],
       cfg: Workflow.Config,
-  )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+  )(using
+      Frame,
+  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     for
       // Run dependencies first, honoring cfg.parallelism (Task 47).
       depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
@@ -239,7 +262,9 @@ private[workflow] object Scheduler:
       task: Task.Persistent[?],
       memo: AtomicRef[Map[TaskId, NodeResult]],
       cfg: Workflow.Config,
-  )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+  )(using
+      Frame,
+  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     for
       depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
@@ -308,14 +333,16 @@ private[workflow] object Scheduler:
       task: Task.Command[?],
       memo: AtomicRef[Map[TaskId, NodeResult]],
       cfg: Workflow.Config,
-  )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+  )(using
+      Frame,
+  ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     val started = java.time.Instant.now()
     for
       depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
       depIds      = depResults.map(r => taskIdOf(task.deps, depResults, r))
       _          <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
-      ctx         = newCommandContext()
+      ctx        <- newCommandContext()
       value      <- runBody(task.id, task.body(ctx, depArgs))
       // Command outputs are not consumed by downstream deps (Commands are
       // entry points), so the valueHash is a sentinel rather than a hash
@@ -344,16 +371,23 @@ private[workflow] object Scheduler:
       clock = Clock.live,
     )
 
-  /** Build a [[CommandContext]] for the Command body. CLI parsing lands in
-    * plan Phase 13 (Tasks 50+); until then the invocation is empty.
+  /** Build a [[CommandContext]] for the Command body.
+    *
+    * CLI tokens are sourced from the ambient [[Workflow.CliTokens]] Env, which
+    * [[Workflow.runCli]] populates. Plain [[Workflow.run]] callers wrap with
+    * an empty `CliTokens`, so this Env requirement is always satisfied.
     */
-  private def newCommandContext()(using Frame): CommandContext =
-    CommandContext(
-      args  = CliInvocation(Chunk.empty[String], Maybe.empty),
-      dest  = io.eleven19.kymora.vfs.VPath(""),
-      emit  = (_: Any) => (),
-      clock = Clock.live,
-    )
+  private def newCommandContext()(using
+      Frame,
+  ): CommandContext < Env[Workflow.CliTokens] =
+    Env.use[Workflow.CliTokens] { tokens =>
+      CommandContext(
+        args  = CliInvocation(tokens.raw, Maybe.empty),
+        dest  = io.eleven19.kymora.vfs.VPath(""),
+        emit  = (_: Any) => (),
+        clock = Clock.live,
+      )
+    }
 
   /** Best-effort fingerprint of a runtime value. Uses `Schema[String]` on
     * the `value.toString` so we always get a deterministic-ish hash without

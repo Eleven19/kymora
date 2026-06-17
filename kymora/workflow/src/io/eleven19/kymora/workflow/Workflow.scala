@@ -6,6 +6,11 @@ import io.eleven19.kymora.workflow.store.*
 import io.eleven19.kymora.vfs.*
 import kyo.*
 
+// `kyo.*` re-exports its own `Command` type which would shadow the package-
+// level `Command` alias under the wildcard import. Pin our alias back so
+// `runCli`'s `cmd: Command[A]` parameter resolves to the workflow Command.
+import io.eleven19.kymora.workflow.Command
+
 object Workflow:
   /** Definition-scope helper.
     *
@@ -100,4 +105,40 @@ object Workflow:
       keys <- cfg.store.list(prefix)
       _    <- Kyo.foreach(keys)(cfg.store.remove)
     yield ()
+
+  /** Internal carrier for CLI tokens, threaded through the scheduler so a
+    * `Command.cli` body can pull them out of its [[CommandContext]].
+    *
+    * Public surface is intentionally tiny: only [[runCli]] populates a real
+    * value here; everything else (plain [[run]] / [[runAll]]) uses the empty
+    * default.
+    */
+  private[workflow] final case class CliTokens(raw: Chunk[String])
+  private[workflow] object CliTokens:
+    val empty: CliTokens = CliTokens(Chunk.empty[String])
+
+  /** Run a single [[Command]] against a list of CLI tokens.
+    *
+    * Threads the tokens into the scheduler via the [[CliTokens]] Env so the
+    * `Command.cli`-built body sees them on its `CommandContext.args.raw`.
+    * Parse errors raised inside the body via
+    * [[Command.CommandArgsParseException]] are caught and re-projected as a
+    * typed [[CliParseError]] on the error channel.
+    */
+  def runCli[A](cmd: Command[A], tokens: Seq[String])(using
+      Frame,
+  ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError | CliParseError]) =
+    val carrier = CliTokens(Chunk.from(tokens))
+    val raw     =
+      Env.run(carrier)(Scheduler.executeWithTokens(cmd))
+        : A < (Async & Env[Workflow.Config] & Abort[WorkflowError])
+    Abort.recover[WorkflowError] {
+      case WorkflowError.TaskFailed(_, message) if message.startsWith("CLI parse failed: ") =>
+        Abort.fail[CliParseError](
+          CliParseError.Failed(message.stripPrefix("CLI parse failed: "), usage = ""),
+        )
+      case other =>
+        Abort.fail[WorkflowError](other)
+    }(raw)
+  end runCli
 end Workflow
