@@ -40,15 +40,21 @@ trait WorkflowTestModule extends _root_.build.CommonScalaTestModule {
 
 object jvm extends WorkflowJvmModule {
     override def moduleDeps = Seq(build.kymora.vfs.jvm)
-    object test extends ScalaTests with WorkflowTestModule with _root_.build.KyoTestModule
+    object test extends ScalaTests with WorkflowTestModule with _root_.build.KyoTestModule {
+        override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.jvm)
+    }
 }
 
 object js extends WorkflowModule with _root_.build.CommonScalaJSModule {
     override def moduleDeps = Seq(build.kymora.vfs.js)
-    object test extends ScalaJSTests with WorkflowTestModule with _root_.build.KyoTestJSModule
+    object test extends ScalaJSTests with WorkflowTestModule with _root_.build.KyoTestJSModule {
+        override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.js)
+    }
 }
 
 object native extends WorkflowModule with _root_.build.CommonScalaNativeModule {
     override def moduleDeps = Seq(build.kymora.vfs.native)
-    object test extends ScalaNativeTests with WorkflowTestModule with _root_.build.KyoTestNativeModule
+    object test extends ScalaNativeTests with WorkflowTestModule with _root_.build.KyoTestNativeModule {
+        override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.native)
+    }
 }

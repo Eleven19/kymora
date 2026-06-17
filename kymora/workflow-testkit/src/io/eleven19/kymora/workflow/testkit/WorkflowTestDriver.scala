@@ -14,44 +14,45 @@ import kyo.*
   *
   * Usage:
   * {{{
-  *   TestClock.run { tc =>
-  *     for
-  *       driver <- WorkflowTestDriver.init
-  *       _      <- driver.reporter.onEvent(...)
-  *       events <- driver.events
-  *     yield events
-  *   }
+  *   for
+  *     driver <- WorkflowTestDriver.init
+  *     value  <- Env.run(driver.config)(driver.run(goal))
+  *   yield value
   * }}}
-  *
-  * The [[run]] execution entry point is a stub until Phase 11 lands
-  * `Workflow.run`.
   */
 final class WorkflowTestDriver private (
     val store: CacheStore,
     val reporter: TestReporter,
+    val config: Workflow.Config,
 ):
 
   /** All [[WorkflowEvent]]s captured so far, in emission order. */
   def events: Chunk[WorkflowEvent] < Async = reporter.events
 
-  /** Execute a goal. STUBBED — implementation lands in Phase 11. */
-  def run[A](goal: Task[A]): A < (Async & Abort[WorkflowError]) =
-    Abort.fail(WorkflowError.TaskFailed(
-      goal.id,
-      "WorkflowTestDriver.run not yet wired — Workflow.run lands in plan Phase 11 (Task 44+)",
-    ))
+  /** Execute a goal under this driver's [[config]] via [[Workflow.run]]. */
+  def run[A](goal: Task[A])(using
+      Frame,
+  ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+    Workflow.run(goal)
 
 end WorkflowTestDriver
 
 object WorkflowTestDriver:
 
-  /** Constructs a fresh driver wired with an [[InMemoryCacheStore]] and a
-    * fresh [[TestReporter]].
+  /** Constructs a fresh driver wired with an [[InMemoryCacheStore]], a
+    * fresh [[TestReporter]], and a [[Workflow.Config]] composed from the
+    * two.
     */
   def init(using Frame): WorkflowTestDriver < (Async & Abort[StoreError]) =
     for
       store    <- InMemoryCacheStore.init
       reporter <- TestReporter.init
-    yield new WorkflowTestDriver(store, reporter)
+      cfg       = Workflow.Config(
+                    store       = store,
+                    codec       = Json(),
+                    parallelism = 1,
+                    reporter    = reporter,
+                  )
+    yield new WorkflowTestDriver(store, reporter, cfg)
 
 end WorkflowTestDriver

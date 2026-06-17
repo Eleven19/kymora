@@ -1,5 +1,6 @@
 package io.eleven19.kymora.workflow
 
+import io.eleven19.kymora.workflow.internal.Scheduler
 import io.eleven19.kymora.workflow.internal.Validation
 import io.eleven19.kymora.workflow.store.*
 import io.eleven19.kymora.vfs.*
@@ -62,4 +63,26 @@ object Workflow:
         reporter    = ConsoleReporter,
       )
   end Config
+
+  /** Execute a single goal task under the ambient [[Workflow.Config]].
+    *
+    * Implementation lives in [[internal.Scheduler]]. The current slice is a
+    * sequential, in-process scheduler that handles `Source` / `Input` /
+    * `Task.Cached`. `Task.Persistent` and `Task.Command` paths surface a
+    * `WorkflowError.TaskFailed` describing the gap. Parallelism (Task 47),
+    * real `TaskRecord[A]` round-tripping (Tasks 48-49), and persistent /
+    * command kinds (Tasks 45-46) arrive in subsequent plan tasks.
+    */
+  def run[A](goal: Task[A])(using
+      Frame,
+  ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+    Scheduler.execute(goal)
+
+  /** Execute multiple goal tasks in declaration order under the ambient
+    * [[Workflow.Config]] and return their materialised values.
+    */
+  def runAll[A](goals: Task[A]*)(using
+      Frame,
+  ): Chunk[A] < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+    Kyo.foreach(Chunk.from(goals))(g => Scheduler.execute(g))
 end Workflow
