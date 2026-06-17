@@ -126,7 +126,7 @@ private[workflow] object Scheduler:
   ): NodeResult < (Async & Env[Workflow.Config] & Env[Workflow.CliTokens] & Abort[WorkflowError]) =
     Env.use[Workflow.Config] { cfg =>
       for
-        _      <- cfg.reporter.onEvent(WorkflowEvent.TaskQueued(task.id))
+        _      <- cfg.observer.onEvent(WorkflowEvent.TaskQueued(task.id))
         result <- task match
                     case src: Task.Source        => runSource(src, cfg)
                     case in: Task.Input[?]       => runInput(in, cfg)
@@ -153,8 +153,8 @@ private[workflow] object Scheduler:
     val pathHash =
       Fingerprint.ofBytes(Chunk.from(s"source:${src.path.show}".getBytes))
     for
-      _ <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started))
-      _ <- cfg.reporter.onEvent(WorkflowEvent.TaskCompleted(src.id, pathHash, 0L))
+      _ <- cfg.observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started))
+      _ <- cfg.observer.onEvent(WorkflowEvent.TaskCompleted(src.id, pathHash, 0L))
     yield NodeResult(VPathRef(src.path, pathHash, quick = src.quick), pathHash)
   end runSource
 
@@ -167,12 +167,12 @@ private[workflow] object Scheduler:
   )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
     val started = java.time.Instant.now()
     for
-      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(in.id, Chunk.empty, started))
+      _     <- cfg.observer.onEvent(WorkflowEvent.TaskStarted(in.id, Chunk.empty, started))
       value <- runBody(in.id, in.read())
       // Hashable.hash takes A, but in.hashable is Hashable[?] — Hashable is
       // contravariant in effect (a hash function), so a cast is safe here.
       vh     = in.hashable.asInstanceOf[Hashable[Any]].hash(value)
-      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskCompleted(in.id, vh, 0L))
+      _     <- cfg.observer.onEvent(WorkflowEvent.TaskCompleted(in.id, vh, 0L))
     yield NodeResult(value, vh)
   end runInput
 
@@ -215,7 +215,7 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
   )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
     for
-      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskCached(task.id, expected))
+      _     <- cfg.observer.onEvent(WorkflowEvent.TaskCached(task.id, expected))
       ctx    = newTaskContext()
       value <- runBody(task.id, task.body(ctx, depArgs))
       vh     = valueFingerprint(value)
@@ -235,11 +235,11 @@ private[workflow] object Scheduler:
     val started = java.time.Instant.now()
     val depIds  = depFps.map(_.id)
     for
-      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
+      _     <- cfg.observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
       ctx    = newTaskContext()
       value <- runBody(task.id, task.body(ctx, depArgs))
       vh     = valueFingerprint(value)
-      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+      _     <- cfg.observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
       _     <-
         if cfg.readOnly || cfg.noCache then (() : Unit < Async)
         else writeSentinel(cfg, key, bodyHash, expected, vh, task.version)
@@ -288,7 +288,7 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
   )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
     for
-      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskCached(task.id, expected))
+      _     <- cfg.observer.onEvent(WorkflowEvent.TaskCached(task.id, expected))
       ctx    = newTaskContext()
       value <- runBody(task.id, task.body(ctx, depArgs))
       vh     = valueFingerprint(value)
@@ -306,11 +306,11 @@ private[workflow] object Scheduler:
     val started = java.time.Instant.now()
     val depIds  = depFps.map(_.id)
     for
-      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
+      _     <- cfg.observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
       ctx    = newTaskContext()
       value <- runBody(task.id, task.body(ctx, depArgs))
       vh     = valueFingerprint(value)
-      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+      _     <- cfg.observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
       _     <-
         if cfg.readOnly || cfg.noCache then (() : Unit < Async)
         else writeSentinel(cfg, key, bodyHash, expected, vh, task.version)
@@ -341,14 +341,14 @@ private[workflow] object Scheduler:
       depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
       depIds      = depResults.map(r => taskIdOf(task.deps, depResults, r))
-      _          <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
+      _          <- cfg.observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
       ctx        <- newCommandContext()
       value      <- runBody(task.id, task.body(ctx, depArgs))
       // Command outputs are not consumed by downstream deps (Commands are
       // entry points), so the valueHash is a sentinel rather than a hash
       // of the runtime value.
       vh          = Fingerprint.unsafe("command:nostore")
-      _          <- cfg.reporter.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+      _          <- cfg.observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
     yield NodeResult(value, vh)
   end runCommand
 

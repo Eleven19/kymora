@@ -3,7 +3,7 @@ package io.eleven19.kymora.workflow
 import kyo.*
 
 /** Pretty-prints events to stdout. */
-object ConsoleReporter extends Reporter:
+object ConsoleObserver extends Observer:
   /** Format a single event as a one-line stdout-ready string. */
   def format(event: WorkflowEvent): String = event match
     case WorkflowEvent.RunStarted(goals, at)     => s"[$at] RUN  start  goals=${goals.size}"
@@ -17,4 +17,4 @@ object ConsoleReporter extends Reporter:
 
   override def onEvent(event: WorkflowEvent): Unit < Async =
     Sync.defer(java.lang.System.out.println(format(event)))
-end ConsoleReporter
+end ConsoleObserver

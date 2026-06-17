@@ -21,10 +21,10 @@ class WorkflowTestDriverTests extends Test[Any]:
       assert(r.isDefined)
       assert(r.get.bytes == Chunk.from("v".getBytes))
   }
-  "WorkflowTestDriver.events captures events emitted via the reporter" in {
+  "WorkflowTestDriver.events captures events emitted via the observer" in {
     for
       driver <- WorkflowTestDriver.init
-      _      <- driver.reporter.onEvent(WorkflowEvent.TaskQueued(TaskId("foo")))
+      _      <- driver.observer.onEvent(WorkflowEvent.TaskQueued(TaskId("foo")))
       events <- driver.events
     yield
       assert(events.size == 1)

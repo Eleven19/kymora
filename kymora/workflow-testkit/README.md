@@ -15,7 +15,8 @@ test code would force every consumer to reinvent them.
   primitives.
 - `InMemoryCacheStore.init` — `VfsDirStore` over an in-memory VFS.
 - `TestClock` — controllable `Clock` fake (`set` / `advance`).
-- `TestReporter` — captures the `WorkflowEvent` stream for assertions.
+- `CollectingObserver` — an `Observer` that captures the `WorkflowEvent`
+  stream for assertions.
 - `TaskBuilder` — ObjectMothers for common graph shapes (`linearChain`,
   `diamond`, `sourceInputChain`).
 - `TestVfs.tempDir` — `Scope`-bound temp VFS.
@@ -38,7 +39,4 @@ yield (result, events)
 
 - **`kyo.*` shadows workflow names under wildcard imports.** Construct
   tasks via `Task.<kind>` (`Task.command`, `Task.source`, `Task.input`, …)
-  to dodge the `kyo.Command` shadow — see the workflow module README. A
-  similar caveat applies to `TestReporter` in test code if you `import
-  kyo.*` alongside the testkit; pin the name explicitly with
-  `import io.eleven19.kymora.workflow.testkit.TestReporter` when needed.
+  to dodge the `kyo.Command` shadow — see the workflow module README.

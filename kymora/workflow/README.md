@@ -20,7 +20,7 @@ for the architecture and conventions.
 - `Workflow.run(goal)` / `runAll` / `runCli` — engine entry points.
 - `CacheStore` — pluggable persistence. Default: `VfsDirStore` backed by
   `kymora-vfs`.
-- `WorkflowEvent` + `Reporter` — observability stream.
+- `WorkflowEvent` + `Observer` — observability stream.
 
 ## Examples
 
@@ -34,7 +34,7 @@ See [`kymora-examples`](../examples) for:
 ## Testing
 
 See [`kymora-workflow-testkit`](../workflow-testkit) for `WorkflowTestDriver`,
-`TestClock`, `TestReporter`, `InMemoryCacheStore`, and `TaskBuilder`
+`TestClock`, `CollectingObserver`, `InMemoryCacheStore`, and `TaskBuilder`
 ObjectMothers.
 
 ## Gotchas

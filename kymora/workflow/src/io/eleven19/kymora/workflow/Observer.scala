@@ -5,36 +5,36 @@ import kyo.*
 /** Consumer of the engine's [[WorkflowEvent]] stream.
   *
   * Minimal contract: `onEvent(event)` accepts a single event. The
-  * higher-level `openSession()` method returns a [[Scope]]-bound [[Reporter.Session]]
-  * that the engine can use to bracket a run's reporter state (e.g. a JSON file
+  * higher-level `openSession()` method returns a [[Scope]]-bound [[Observer.Session]]
+  * that the engine can use to bracket a run's observer state (e.g. a JSON file
   * handle to close, a console live-progress display to tear down).
   *
-  * Concrete reporters (`ConsoleReporter`, `JsonLinesReporter`) land in Task 40.
+  * Concrete observers: `ConsoleObserver`, `JsonLinesObserver`.
   */
-trait Reporter:
+trait Observer:
   /** Called by the engine for each emitted [[WorkflowEvent]]. */
   def onEvent(event: WorkflowEvent): Unit < Async = ()
 
-  /** Acquire a [[Reporter.Session]] for one workflow run.
+  /** Acquire an [[Observer.Session]] for one workflow run.
     *
     * The default implementation returns a thin pass-through session that
-    * delegates `onEvent` back to this reporter and has a no-op `close`.
-    * Reporters that own real resources (open file, live display) should
+    * delegates `onEvent` back to this observer and has a no-op `close`.
+    * Observers that own real resources (open file, live display) should
     * override this to register cleanup via [[Scope.ensure]].
     */
-  def openSession(): Reporter.Session < (Async & Scope) =
+  def openSession(): Observer.Session < (Async & Scope) =
     val self = this
-    Sync.defer(new Reporter.Session:
+    Sync.defer(new Observer.Session:
       def onEvent(event: WorkflowEvent): Unit < Async = self.onEvent(event)
       def close(): Unit < Async                       = ()
     )
-end Reporter
+end Observer
 
-object Reporter:
-  /** Per-run handle returned by [[Reporter.openSession]].
+object Observer:
+  /** Per-run handle returned by [[Observer.openSession]].
     *
     * The engine calls `onEvent` for every emitted [[WorkflowEvent]] during a
-    * run and `close` once at the end. Resource-owning reporters typically
+    * run and `close` once at the end. Resource-owning observers typically
     * register `close` with [[Scope.ensure]] so that an early failure still
     * tears them down.
     */
@@ -44,5 +44,5 @@ object Reporter:
   end Session
 
   /** Discards every event. Useful for benchmarks and silent runs. */
-  object NoOp extends Reporter
-end Reporter
+  object NoOp extends Observer
+end Observer

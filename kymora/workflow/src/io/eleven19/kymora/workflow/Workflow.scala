@@ -13,7 +13,7 @@ object Workflow:
     * Task.init / Task.source / Task.input / Task.command invocations inside
     * `body` see the qualified prefix.
     *
-    * Resource scopes (cache lock, reporter session, etc.) use Kyo's Scope
+    * Resource scopes (cache lock, observer session, etc.) use Kyo's Scope
     * effect separately — see Workflow.run in Phase 11.
     */
   inline def scope[A](inline prefix: String)(body: TaskScope ?=> A)(using
@@ -30,7 +30,7 @@ object Workflow:
   /** Runtime configuration. Injected via `Env[Workflow.Config]`.
     *
     * Carries the engine's pluggable seams: cache store, blob codec, scheduler
-    * fan-out, reporter sink, and a handful of run-level flags (bypass /
+    * fan-out, observer sink, and a handful of run-level flags (bypass /
     * read-only / no-cache / continue-on-error / verify-dest). The default
     * `Clock` is the ambient `Clock.live`; explicit clock injection is left to
     * later phases if needed.
@@ -39,7 +39,7 @@ object Workflow:
       store: CacheStore,
       codec: Codec,
       parallelism: Int,
-      reporter: Reporter,
+      observer: Observer,
       bypass: Set[TaskId] = Set.empty,
       readOnly: Boolean = false,
       noCache: Boolean = false,
@@ -50,7 +50,7 @@ object Workflow:
   object Config:
     /** A sensible default `Config`: in-memory VFS rooted at `cache/`,
       * `Json()` blob codec, parallelism = max(2, cores - 1), and the
-      * `ConsoleReporter` sink. */
+      * `ConsoleObserver` sink. */
     def default(using Frame): Config < (Async & Abort[StoreError]) =
       for
         vfs   <- Vfs.inMemory.init
@@ -60,7 +60,7 @@ object Workflow:
         store       = store,
         codec       = Json(),
         parallelism = math.max(2, java.lang.Runtime.getRuntime.availableProcessors - 1),
-        reporter    = ConsoleReporter,
+        observer    = ConsoleObserver,
       )
   end Config
 

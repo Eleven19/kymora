@@ -3,7 +3,7 @@ package io.eleven19.kymora.workflow
 import kyo.*
 
 /** Emits one JSON object per line. Sink defaults to stdout. */
-object JsonLinesReporter extends Reporter:
+object JsonLinesObserver extends Observer:
   /** Hand-rolled JSON encoder. Avoids kyo-schema's opaque-type derivation
     * limitation (TaskId, Fingerprint are opaque String aliases).
     */
@@ -33,4 +33,4 @@ object JsonLinesReporter extends Reporter:
 
   override def onEvent(event: WorkflowEvent): Unit < Async =
     Sync.defer(java.lang.System.out.println(toJson(event)))
-end JsonLinesReporter
+end JsonLinesObserver
