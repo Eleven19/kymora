@@ -7,11 +7,9 @@ import mill.scalanativelib.*
 import coursier.maven.MavenRepository
 
 object KymoraVersions:
-    /** Minimum required Kyo version. Later snapshot or stable releases are acceptable. */
+    /** Pinned Kyo snapshot. All Kyo modules ship at the same snapshot tag —
+      * pinned together here. */
     val Kyo: String = "1.0.0-RC2+139-715dffd7-SNAPSHOT"
-
-    /** Pinned mainargs version for CLI argument parsing. */
-    val mainargs: String = "0.7.6"
 
     /** Pinned scribe version for cross-platform logging (JVM + JS + Native). */
     val Scribe: String = "3.16.1"
@@ -113,6 +111,14 @@ trait KyoTestNativeModule extends KyoTestModule {
 
 trait CommonScalaJSModule extends ScalaJSModule with scalafmt.ScalafmtModule {
   def scalaJSVersion = "1.21.0"
+
+  // CommonJSModule (default: NoModule). Required because kyo-core's
+  // `Path` Scala.js backend imports `node:path` and needs a real CJS
+  // `require`. NoModule output drops the import declarations and the
+  // linker refuses any code that reaches the Node path bindings —
+  // hits as soon as testkit's TestVfs.tempDir is referenced.
+  override def moduleKind: T[mill.scalajslib.api.ModuleKind] =
+    Task { mill.scalajslib.api.ModuleKind.CommonJSModule }
 }
 
 /** Scala.js module variant that emits a Wasm GC module instead of plain JS.

@@ -1,6 +1,7 @@
 package io.eleven19.kymora.workflow.store
 
 import io.eleven19.kymora.workflow.*
+import io.eleven19.kymora.workflow.store.internal.PersistentMutex
 import io.eleven19.kymora.vfs.*
 import kyo.*
 
@@ -89,23 +90,19 @@ object VfsDirStore:
 
   private final class Impl(root: VPath, vfs: Vfs) extends CacheStore:
 
-    /** Per-key permits for [[openPersistentWorkspace]].
+    /** Per-key in-process mutex for [[openPersistentWorkspace]].
       *
       * Scoped to this `Impl` instance (one `VfsDirStore`/`root`). Two stores
       * that happen to use the same `CacheKey.value` do not contend, because
       * their `.dest/` paths live under different roots and never touch the
       * same files.
       *
-      * `Semaphore(1, fair = true)` rather than `ReentrantLock`: Kyo fibers can
-      * acquire on one carrier thread and release on another (Scope finalizer),
-      * which `ReentrantLock` rejects with `IllegalMonitorStateException`.
-      * Semaphore permits have no owning-thread requirement.
-      *
-      * Real cross-process advisory locking would need an OS file lock; this
-      * in-process map is enough for v1 correctness inside a single JVM.
+      * Real impl lives in `src-jvm-native/` ([[PersistentMutex]] backed by
+      * `Semaphore`); JS gets a no-op variant under `src-js/` since the
+      * event-loop already serializes fibers. Real cross-process advisory
+      * locking would need an OS file lock — out of scope for v1.
       */
-    private val persistentLocks =
-      new java.util.concurrent.ConcurrentHashMap[String, java.util.concurrent.Semaphore]()
+    private val persistentLocks = new PersistentMutex
 
     def read(key: CacheKey): Maybe[StoredManifest] < (Async & Abort[StoreError]) =
       val p = manifestPath(root, key)
@@ -192,15 +189,8 @@ object VfsDirStore:
     def openPersistentWorkspace(key: CacheKey): VPath < (Async & Scope & Abort[StoreError]) =
       val p = destPath(root, key)
       Abort.recover[VfsError](e => Abort.fail(StoreError.fromThrowable(p.show, e))):
-        Sync.defer {
-          val permit = persistentLocks.computeIfAbsent(
-            key.value,
-            _ => new java.util.concurrent.Semaphore(1, true)
-          )
-          permit.acquireUninterruptibly()
-          permit
-        }.map { permit =>
-          Scope.ensure(Sync.defer(permit.release())).andThen(p)
+        Sync.defer(persistentLocks.acquire(key.value)).map { _ =>
+          Scope.ensure(Sync.defer(persistentLocks.release(key.value))).andThen(p)
         }
   end Impl
 end VfsDirStore
