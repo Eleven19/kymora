@@ -17,4 +17,7 @@ object TaskId:
     def segments: List[String] = id.split('.').toList.filter(_.nonEmpty)
 
   given CanEqual[TaskId, TaskId] = CanEqual.derived
+
+  given schema: Schema[TaskId] =
+    Schema.stringSchema.transform[TaskId](TaskId.unsafe)(_.value)
 end TaskId

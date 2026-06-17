@@ -6,12 +6,11 @@ import kyo.*
   * task execution.
   *
   * The hierarchy is closed (`sealed trait`) and `CanEqual`-derived for strict
-  * equality. `Schema` is **not** derived: several variants carry `TaskId`, an
-  * opaque type whose representation the kyo-schema macro currently treats as
-  * non-serializable (the macro inspects the underlying type symbol, not the
-  * user-provided `Schema[TaskId]` given). Round-trip serialization, when it is
-  * needed (e.g. for cache + observability persistence), is provided by a
-  * hand-rolled codec elsewhere — see `Manifest`/observability layers (Task 27+).
+  * equality. `Schema` is derived for round-trip serialization (cache +
+  * observability persistence). The kyo-schema 1.0.0-RC2 macro can derive
+  * automatically because every `TaskId`/`TaskScope` field is backed by an
+  * explicit `given Schema[…]` in the corresponding companion object — see
+  * issue #11.
   *
   * Several variants carry a `Chunk` of items where a non-empty list is the
   * intended invariant (e.g. `DuplicateTaskId.kinds`, `CycleDetected.cycle`,
@@ -19,7 +18,7 @@ import kyo.*
   * non-empty contract is documented per field rather than encoded in the type;
   * constructors that produce these errors must enforce it.
   */
-sealed trait WorkflowError derives CanEqual
+sealed trait WorkflowError derives CanEqual, Schema
 object WorkflowError:
   // Graph-construction (pre-execution) -------------------------------------
 

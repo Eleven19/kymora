@@ -8,12 +8,11 @@ import kyo.*
   * Kept separate from [[WorkflowError]] so the CLI layer can report
   * usage-style failures without polluting the engine's error surface.
   *
-  * `Schema` is **not** derived for the same reason as
-  * [[WorkflowError]]: `UnknownCommand` and `MissingArgsParser` carry
-  * `TaskId` (opaque), which the kyo-schema macro does not treat as a
-  * serializable leaf.
+  * `Schema` is derived (see [[WorkflowError]] for the same explanation): the
+  * `TaskId` companion provides an explicit `given Schema[TaskId]`, so the
+  * kyo-schema 1.0.0-RC2 macro can auto-derive for variants that carry it.
   */
-sealed trait CliParseError derives CanEqual
+sealed trait CliParseError derives CanEqual, Schema
 object CliParseError:
   /** A generic parse failure with the renderable usage banner attached. */
   final case class Failed(message: String, usage: String) extends CliParseError

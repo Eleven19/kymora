@@ -34,4 +34,22 @@ class ErrorsTests extends Test[Any]:
     val e = CliParseError.UnknownCommand("foo", Chunk(TaskId("a"), TaskId("b")))
     assert(e.available.size == 2)
   }
+  "WorkflowError.CycleDetected Schema round-trips through Json" in {
+    val e: WorkflowError = WorkflowError.CycleDetected(Chunk(TaskId("a"), TaskId("b")))
+    val s = summon[Schema[WorkflowError]].encodeString[Json](e)
+    val r = summon[Schema[WorkflowError]].decodeString[Json](s)
+    assert(r == Result.succeed(e))
+  }
+  "WorkflowError.DuplicateTaskId Schema round-trips" in {
+    val e: WorkflowError = WorkflowError.DuplicateTaskId(TaskId("compile"), Chunk("Task.Cached", "Source"))
+    val s = summon[Schema[WorkflowError]].encodeString[Json](e)
+    val r = summon[Schema[WorkflowError]].decodeString[Json](s)
+    assert(r == Result.succeed(e))
+  }
+  "CliParseError.UnknownCommand Schema round-trips" in {
+    val e: CliParseError = CliParseError.UnknownCommand("foo", Chunk(TaskId("a"), TaskId("b")))
+    val s = summon[Schema[CliParseError]].encodeString[Json](e)
+    val r = summon[Schema[CliParseError]].decodeString[Json](s)
+    assert(r == Result.succeed(e))
+  }
 end ErrorsTests

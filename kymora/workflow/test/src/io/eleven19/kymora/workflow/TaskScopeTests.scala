@@ -23,4 +23,10 @@ class TaskScopeTests extends Test[Any]:
     val errs = typeCheckErrors("io.eleven19.kymora.workflow.TaskScope(\"foo/bar\")")
     assert(errs.exists(_.message.contains("ContainsSlash")))
   }
+  "TaskScope Schema round-trips through Json" in {
+    val scope = TaskScope("kymora.vfs.jvm")
+    val s     = summon[Schema[TaskScope]].encodeString[Json](scope)
+    val r     = summon[Schema[TaskScope]].decodeString[Json](s)
+    assert(r == Result.succeed(scope))
+  }
 end TaskScopeTests

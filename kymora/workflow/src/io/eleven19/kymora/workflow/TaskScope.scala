@@ -23,4 +23,7 @@ object TaskScope:
     def segments: List[String] = scope.split('.').toList.filter(_.nonEmpty)
 
   given CanEqual[TaskScope, TaskScope] = CanEqual.derived
+
+  given schema: Schema[TaskScope] =
+    Schema.stringSchema.transform[TaskScope](TaskScope.unsafe)(_.value)
 end TaskScope

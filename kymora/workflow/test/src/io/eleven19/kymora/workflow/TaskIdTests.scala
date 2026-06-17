@@ -21,4 +21,10 @@ class TaskIdTests extends Test[Any]:
     val id = TaskId.unsafe("foo.bar.baz")
     assert(id.segments == List("foo", "bar", "baz"))
   }
+  "TaskId Schema round-trips through Json" in {
+    val id = TaskId("foo.bar")
+    val s  = summon[Schema[TaskId]].encodeString[Json](id)
+    val r  = summon[Schema[TaskId]].decodeString[Json](s)
+    assert(r == Result.succeed(id))
+  }
 end TaskIdTests
