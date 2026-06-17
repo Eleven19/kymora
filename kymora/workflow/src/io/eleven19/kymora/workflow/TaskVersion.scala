@@ -34,8 +34,9 @@ object TaskVersion:
         val s = r.string()
         parse(s) match
           case Result.Success(v) => v
-          case _                 =>
-            //TODO: Shouldn't this be providing a failure instead of throwing an exception? We want errors as values, not exceptions.
-            throw new IllegalArgumentException(s"Malformed TaskVersion: $s")
+          // kyo-schema's `readFn: Reader => A` is total — there is no
+          // failure channel to thread a Result through. Malformed input
+          // throws; the surrounding decode invocation surfaces it.
+          case _ => throw new IllegalArgumentException(s"Malformed TaskVersion: $s")
     )
 end TaskVersion

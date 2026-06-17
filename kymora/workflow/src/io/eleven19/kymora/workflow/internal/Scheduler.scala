@@ -349,11 +349,7 @@ private[workflow] object Scheduler:
     )(body)
 
   private def newTaskContext()(using Frame): TaskContext =
-    TaskContext(
-      dest  = io.eleven19.kymora.vfs.VPath(""),
-      emit  = (_: Any) => (),
-      clock = Clock.live,
-    )
+    TaskContext(dest = io.eleven19.kymora.vfs.VPath(""))
 
   /** Best-effort fingerprint of a runtime value. Uses `Schema[String]` on
     * the `value.toString` so we always get a deterministic-ish hash without

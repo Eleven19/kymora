@@ -8,11 +8,10 @@ import kyo.*
   * `dest` is the `.dest/` working directory the engine pre-created for this
   * task body (relevant for Task.Cached and Task.Persistent file-output paths).
   *
-  * For now `emit` is a stub (`Any => Unit`); the real WorkflowEvent emit
-  * lands in Phase 10. Kept here so the body signature is stable.
+  * Single-field case class so additional engine-provided context can be
+  * threaded through without changing every body signature. Bodies that need
+  * time, randomness, or event emission should reach for Kyo's effects
+  * (`Clock`, `Random`, `Emit`) directly rather than expect them on this
+  * record.
   */
-final case class TaskContext(
-    dest: VPath,
-    emit: Any => Unit, // TODO replaced with WorkflowEvent => Unit in Phase 10
-    clock: Clock,
-)
+final case class TaskContext(dest: VPath)
