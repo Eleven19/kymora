@@ -2,6 +2,21 @@
 
 Kymora provides extensions to the [Kyo](https://github.com/getkyo/kyo) framework along with additional modules and utilities to support building applications with Kyo.
 
+## Modules
+
+- [`kymora-core`](kymora/core) — shared primitives for the rest of the suite.
+- [`kymora-vfs`](kymora/vfs) — virtual filesystem abstraction over local / in-memory
+  backends.
+- [`kymora-workflow`](kymora/workflow) — Kyo-native DAG task-graph engine with
+  Mill-aligned incremental caching. See the
+  [design spec](docs/superpowers/specs/2026-06-16-kymora-workflow-design.md).
+- [`kymora-workflow-testkit`](kymora/workflow-testkit) — published test helpers for
+  `kymora-workflow` (in-memory cache, fake clock, event capture, graph
+  ObjectMothers).
+- `kymora-examples` (JVM-only, unpublished) — runnable reference examples:
+  `smile-build` (Mill-style build DSL) and `agent-skills` (workflow-backed agent
+  skill runner).
+
 ## Developing
 
 This project uses [Jujutsu (`jj`)](https://jj-vcs.github.io/jj/) as its default

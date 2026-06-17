@@ -48,7 +48,16 @@ module you touch before claiming completion.
 - `kymora/package.mill.yaml` — the published `kymora` umbrella aggregate.
 
 Current modules: `kymora-core` (`kymora/core`), `kymora-vfs` (`kymora/vfs`,
-depends on `core`).
+depends on `core`), `kymora-workflow` (`kymora/workflow`, depends on
+`core` + `vfs`) and its `kymora-workflow-testkit` (`kymora/workflow-testkit`)
+companion. There is also an unpublished `kymora-examples` (`kymora/examples`,
+JVM-only) carrying runnable reference examples (`smile-build`, `agent-skills`).
+
+`kymora-workflow` is the DAG / incremental-execution library; its
+`kymora-workflow-testkit` companion publishes the in-memory cache, fake clock,
+event capture, and graph-builder ObjectMothers. **Test helpers go in the testkit,
+not in private test source** — downstream users will need them too, so anything
+generally useful for testing workflows belongs in the published testkit module.
 
 ## Conventions
 
