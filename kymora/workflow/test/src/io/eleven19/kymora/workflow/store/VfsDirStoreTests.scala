@@ -41,4 +41,50 @@ class VfsDirStoreTests extends Test[Any]:
     yield
       assert(read.exists(_.bytes == b2))
   }
+  "purge wipes the cache root" in {
+    val root = VPath("cache")
+    for
+      vfs   <- Vfs.inMemory.init
+      store <- VfsDirStore.init(root, vfs)
+      _     <- store.write(CacheKey("a"), Chunk.from("x".getBytes), Maybe.empty)
+      _     <- store.write(CacheKey("b/c"), Chunk.from("y".getBytes), Maybe.empty)
+      _     <- store.purge()
+      ra    <- store.read(CacheKey("a"))
+      rb    <- store.read(CacheKey("b/c"))
+    yield
+      assert(ra.isEmpty)
+      assert(rb.isEmpty)
+  }
+  "remove deletes a single manifest" in {
+    val root = VPath("cache")
+    for
+      vfs   <- Vfs.inMemory.init
+      store <- VfsDirStore.init(root, vfs)
+      _     <- store.write(CacheKey("kymora/vfs/jvm/compile"), Chunk.from("x".getBytes), Maybe.empty)
+      _     <- store.remove(CacheKey("kymora/vfs/jvm/compile"))
+      r     <- store.read(CacheKey("kymora/vfs/jvm/compile"))
+    yield assert(r.isEmpty)
+  }
+  "list returns known keys filtered by prefix" in {
+    val root = VPath("cache")
+    for
+      vfs   <- Vfs.inMemory.init
+      store <- VfsDirStore.init(root, vfs)
+      _     <- store.write(CacheKey("kymora/vfs/jvm/compile"), Chunk.from("x".getBytes), Maybe.empty)
+      _     <- store.write(CacheKey("kymora/vfs/js/compile"), Chunk.from("y".getBytes), Maybe.empty)
+      _     <- store.write(CacheKey("other/thing"), Chunk.from("z".getBytes), Maybe.empty)
+      hits  <- store.list("kymora/vfs/")
+    yield
+      assert(hits.size == 2)
+      assert(hits.exists(_.value == "kymora/vfs/jvm/compile"))
+      assert(hits.exists(_.value == "kymora/vfs/js/compile"))
+  }
+  "remove is idempotent on missing key" in {
+    val root = VPath("cache")
+    for
+      vfs   <- Vfs.inMemory.init
+      store <- VfsDirStore.init(root, vfs)
+      _     <- store.remove(CacheKey("nothing"))
+    yield assert(true)
+  }
 end VfsDirStoreTests
