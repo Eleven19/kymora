@@ -1,6 +1,8 @@
 package io.eleven19.kymora.workflow
 
 import io.eleven19.kymora.workflow.internal.Validation
+import io.eleven19.kymora.workflow.store.*
+import io.eleven19.kymora.vfs.*
 import kyo.*
 
 object Workflow:
@@ -23,4 +25,41 @@ object Workflow:
       outer: TaskScope,
   ): Result[Validation.Reason, A] =
     TaskScope.parse(prefix).map(s => body(using outer.qualify(s.value)))
+
+  /** Runtime configuration. Injected via `Env[Workflow.Config]`.
+    *
+    * Carries the engine's pluggable seams: cache store, blob codec, scheduler
+    * fan-out, reporter sink, and a handful of run-level flags (bypass /
+    * read-only / no-cache / continue-on-error / verify-dest). The default
+    * `Clock` is the ambient `Clock.live`; explicit clock injection is left to
+    * later phases if needed.
+    */
+  final case class Config(
+      store: CacheStore,
+      codec: Codec,
+      parallelism: Int,
+      reporter: Reporter,
+      bypass: Set[TaskId] = Set.empty,
+      readOnly: Boolean = false,
+      noCache: Boolean = false,
+      continueOnError: Boolean = false,
+      verifyDest: Boolean = false,
+  )
+
+  object Config:
+    /** A sensible default `Config`: in-memory VFS rooted at `cache/`,
+      * `Json()` blob codec, parallelism = max(2, cores - 1), and the
+      * `ConsoleReporter` sink. */
+    def default(using Frame): Config < (Async & Abort[StoreError]) =
+      for
+        vfs   <- Vfs.inMemory.init
+        root   = VPath("cache")
+        store <- VfsDirStore.init(root, vfs)
+      yield Config(
+        store       = store,
+        codec       = Json(),
+        parallelism = math.max(2, java.lang.Runtime.getRuntime.availableProcessors - 1),
+        reporter    = ConsoleReporter,
+      )
+  end Config
 end Workflow
