@@ -7,12 +7,18 @@ import kyo.*
 
 /** Default cache store: Mill-style flat layout under a VFS directory.
   *
-  *   - `<root>/<id-segments>.json`  — per-task manifest
-  *   - `<root>/<id-segments>.dest/` — optional output dir for file-producing tasks
+  *   - `<root>/<id-segments>.json`        — per-task manifest
+  *   - `<root>/<id-segments>.dest/`       — `Task.Persistent` working dir,
+  *     retained across runs and held under [[PersistentMutex]] for the
+  *     scope of one body invocation.
+  *   - `<root>/<id-segments>.dest.tmp/`   — `Task.Cached` staging dir,
+  *     atomically renamed to `.dest/` on success and removed on Scope exit
+  *     otherwise.
   *
-  * This task ships `read` + `write` with atomic rename. `purge`, `remove`,
-  * `list`, `openWorkspace`, `openPersistentWorkspace` are stubbed and will be
-  * filled in Tasks 30-31.
+  * `read` / `write` use atomic rename through a sibling `.tmp` file.
+  * `purge` drops the entire root, `remove` drops a single manifest + its
+  * `.dest/`, and `list` walks the root reverse-engineering keys from
+  * `.json` paths.
   */
 object VfsDirStore:
 
