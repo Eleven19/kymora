@@ -33,10 +33,12 @@ object TaskVersion:
       readFn = r =>
         val s = r.string()
         parse(s) match
-          case Result.Success(v) => v
+          case Result.Success(v)              => v
           // kyo-schema's `readFn: Reader => A` is total — there is no
-          // failure channel to thread a Result through. Malformed input
-          // throws; the surrounding decode invocation surfaces it.
-          case _ => throw new IllegalArgumentException(s"Malformed TaskVersion: $s")
+          // failure channel to thread a Result through. The structured
+          // ParseError variant doubles as a RuntimeException so callers
+          // can `catch ParseError =>` or pattern-match on the cause.
+          case Result.Failure(err: ParseError) => throw err
+          case _                               => throw ParseError.MalformedTaskVersion(s)
     )
 end TaskVersion
