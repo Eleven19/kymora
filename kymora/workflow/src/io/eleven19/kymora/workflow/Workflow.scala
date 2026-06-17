@@ -85,4 +85,19 @@ object Workflow:
       Frame,
   ): Chunk[A] < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     Kyo.foreach(Chunk.from(goals))(g => Scheduler.execute(g))
+
+  /** Wipe the entire cache. */
+  def purge(): Unit < (Async & Env[Workflow.Config] & Abort[StoreError]) =
+    for
+      cfg <- Env.get[Workflow.Config]
+      _   <- cfg.store.purge()
+    yield ()
+
+  /** Remove cache entries whose key matches the given prefix. */
+  def clean(prefix: String): Unit < (Async & Env[Workflow.Config] & Abort[StoreError]) =
+    for
+      cfg  <- Env.get[Workflow.Config]
+      keys <- cfg.store.list(prefix)
+      _    <- Kyo.foreach(keys)(cfg.store.remove)
+    yield ()
 end Workflow
