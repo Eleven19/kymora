@@ -20,6 +20,9 @@
   * [[https://github.com/VirtusLab/scala-yaml VirtusLab scala-yaml]] (`YamlCodec`).
   * The `refs` subcommand emits JSON via uPickle for agent consumption.
   *
+  * Use `repair` to rebuild `.ref/manifest.yaml` from existing git checkouts when the
+  * manifest is missing, corrupt, or out of sync with on-disk checkouts.
+  *
   * SCM operations use `git` for clone/fetch/checkout; `gh api` is a fallback for
   * GitHub metadata when `git ls-remote --sort=-committerdate` fails.
   */
@@ -99,6 +102,19 @@ given ReadWriter[RefsResponse] = macroRW
 
 private def emptyManifest: Manifest = Manifest(ManifestVersion, List.empty[RepoEntry])
 
+/** Empty YAML lists are often written as bare `artifacts:`; treat that as `[]` on read. */
+private def sanitizeManifestYaml(raw: String): String =
+  raw.replaceAll("(?m)^(\\s*)artifacts:\\s*$", "$1artifacts: []")
+
+private def manifestToYaml(manifest: Manifest): String =
+  sanitizeManifestYaml(manifest.asYaml)
+
+/** Fields compared when reporting repair updates (timestamps excluded). */
+private def repairComparable(
+    e: RepoEntry
+): (String, String, String, String, String, String, RefPin, List[Artifact]) =
+  (e.id, e.url, e.host, e.owner, e.name, e.path, e.ref, e.artifacts)
+
 private def abort(msg: String): Nothing =
   System.err.println(msg)
   sys.exit(1)
@@ -138,14 +154,17 @@ private def readManifest(root: os.Path): Manifest =
   else
     os.read(path).as[Manifest] match
       case Right(manifest) => manifest
-      case Left(err) =>
-        System.err.println(s"Failed to read manifest: $err")
-        emptyManifest
+      case Left(_) =>
+        sanitizeManifestYaml(os.read(path)).as[Manifest] match
+          case Right(manifest) => manifest
+          case Left(err) =>
+            System.err.println(s"Failed to read manifest: $err")
+            emptyManifest
 
 /** Writes the manifest using VirtusLab scala-yaml (`asYaml`). */
 private def writeManifest(root: os.Path, manifest: Manifest): Unit =
   val path = manifestPath(root)
-  os.write.over(path, manifest.asYaml, createFolders = true)
+  os.write.over(path, manifestToYaml(manifest), createFolders = true)
 
 /** Normalizes a URL, SSH URI, or `owner/repo` shorthand into clone metadata.
   *
@@ -183,6 +202,100 @@ private def parseRepoUrl(raw: String): RepoMeta =
       s"$scheme://$host/$owner/$name.git"
 
   RepoMeta(id, cloneUrl, host, owner, name, s"$RefDirName/$owner/$name")
+
+/** Like `parseRepoUrl`, but returns `None` instead of aborting on invalid input. */
+private def parseRepoUrlOpt(raw: String): Option[RepoMeta] =
+  try Some(parseRepoUrl(raw))
+  catch case _: Exception => None
+
+private def isGitCheckout(path: os.Path): Boolean =
+  os.exists(path / ".git")
+
+/** Finds git checkouts under `.ref/` and their path relative to `.ref` (e.g. `getkyo/kyo`). */
+private def discoverCheckouts(refRoot: os.Path): List[(os.Path, String)] =
+  def walk(current: os.Path, segments: List[String]): List[(os.Path, String)] =
+    if isGitCheckout(current) then List((current, segments.mkString("/")))
+    else if os.isDir(current) then
+      os.list(current)
+        .filter(os.isDir)
+        .toList
+        .flatMap(p => walk(p, segments :+ p.last))
+    else Nil
+
+  if os.exists(refRoot) then walk(refRoot, Nil) else Nil
+
+/** Infers the current pin from a local checkout's HEAD. */
+private def inferRefPin(checkout: os.Path): RefPin =
+  val sha = resolvedSha(checkout)
+  val (symref, _, symOk, _) = run(Seq("git", "symbolic-ref", "-q", "HEAD"), checkout)
+  if symOk && symref.startsWith("refs/heads/") then
+    RefPin("branch", symref.stripPrefix("refs/heads/").trim, Some(sha))
+  else
+    val (tag, _, tagOk, _) =
+      run(Seq("git", "describe", "--tags", "--exact-match", "HEAD"), checkout)
+    if tagOk && tag.trim.nonEmpty then RefPin("tag", tag.trim, Some(sha))
+    else RefPin("commit", sha, Some(sha))
+
+private def metaFromRelativePath(relPath: String): Option[RepoMeta] =
+  val segments = relPath.split("/").filter(_.nonEmpty).toList
+  if segments.length < 2 then None
+  else
+    val name = segments.last
+    val owner = segments.dropRight(1).mkString("/")
+    val id = s"$owner/$name"
+    Some(
+      RepoMeta(
+        id = id,
+        url = s"https://unknown/$owner/$name.git",
+        host = "unknown",
+        owner = owner,
+        name = name,
+        path = s"$RefDirName/$relPath"
+      )
+    )
+
+/** Builds or refreshes a manifest entry from an on-disk checkout. */
+private def entryFromCheckout(
+    checkout: os.Path,
+    relPath: String,
+    existing: Option[RepoEntry]
+): Option[RepoEntry] =
+  val (remote, _, remoteOk, _) = run(Seq("git", "remote", "get-url", "origin"), checkout)
+  val meta =
+    if remoteOk && remote.trim.nonEmpty then parseRepoUrlOpt(remote.trim)
+    else None
+  val metaOrPath = meta.orElse(metaFromRelativePath(relPath))
+  metaOrPath.map { m =>
+    val path = s"$RefDirName/$relPath"
+    val pin = inferRefPin(checkout)
+    val ts = nowIso
+    existing match
+      case Some(entry) =>
+        val lastUpdated = if entry.ref == pin then entry.last_updated else ts
+        entry.copy(
+          id = m.id,
+          url = if m.host == "unknown" then entry.url else m.url,
+          host = if m.host == "unknown" then entry.host else m.host,
+          owner = m.owner,
+          name = m.name,
+          path = path,
+          ref = pin,
+          last_updated = lastUpdated
+        )
+      case None =>
+        RepoEntry(
+          id = m.id,
+          url = m.url,
+          host = m.host,
+          owner = m.owner,
+          name = m.name,
+          path = path,
+          ref = pin,
+          cloned_at = ts,
+          last_updated = ts,
+          artifacts = Nil
+        )
+  }
 
 /** Ensures `.ref/` exists and is gitignored in the target project. */
 private def ensureLayout(root: os.Path): Unit =
@@ -457,6 +570,61 @@ private def cmdContext(root: os.Path): Unit =
     println()
     println("Artifact hints are non-exhaustive. Search the checkout when locating symbols or modules.")
 
+/** Rebuilds `.ref/manifest.yaml` from git checkouts discovered under `.ref/`.
+  *
+  * Adds entries for checkouts missing from the manifest, refreshes pins and URLs
+  * for existing entries, and drops manifest rows whose checkouts are gone unless
+  * `--keep-orphans` is set. Preserves artifact hints and `cloned_at` when the
+  * repo id matches.
+  */
+private def cmdRepair(root: os.Path, dryRun: Boolean, keepOrphans: Boolean): Unit =
+  ensureLayout(root)
+  val refRoot = root / RefDirName
+  val prior = readManifest(root)
+  val priorByPath = prior.repos.map(r => r.path -> r).toMap
+  val priorById = prior.repos.map(r => r.id -> r).toMap
+
+  val checkouts = discoverCheckouts(refRoot)
+  if checkouts.isEmpty && prior.repos.isEmpty then
+    if !dryRun then writeManifest(root, emptyManifest)
+    println(s"No git checkouts under $RefDirName/; wrote empty manifest.")
+    return
+
+  val rebuilt =
+    checkouts.flatMap { case (checkout, relPath) =>
+      val path = s"$RefDirName/$relPath"
+      val existing = priorByPath.get(path).orElse {
+        entryFromCheckout(checkout, relPath, None).flatMap(fresh => priorById.get(fresh.id))
+      }
+      entryFromCheckout(checkout, relPath, existing)
+    }
+
+  val rebuiltIds = rebuilt.map(_.id).toSet
+  val orphans = prior.repos.filterNot(r => rebuiltIds.contains(r.id))
+  val merged =
+    if keepOrphans then (rebuilt ++ orphans.filterNot(o => rebuiltIds.contains(o.id))).distinctBy(_.id)
+    else rebuilt
+
+  val added = merged.filter(m => !priorById.contains(m.id))
+  val updated = merged.filter(m => priorById.get(m.id).exists(p => repairComparable(p) != repairComparable(m)))
+  val removed = if keepOrphans then Nil else orphans
+
+  if dryRun then
+    println("Dry run — no files written.")
+  else
+    writeManifest(root, Manifest(ManifestVersion, merged.sortBy(_.id)))
+
+  println(
+    s"Repair summary: ${merged.length} repo(s) in manifest " +
+      s"(${added.length} added, ${updated.length} updated, ${removed.length} removed)."
+  )
+  added.foreach(e => println(s"  + ${e.id} → ${e.path} (${e.ref.`type`} ${e.ref.value})"))
+  updated.foreach(e => println(s"  ~ ${e.id} → ${e.path} (${e.ref.`type`} ${e.ref.value})"))
+  removed.foreach(e => println(s"  - ${e.id} (checkout missing)"))
+  checkouts.filter { case (_, rel) => !merged.exists(_.path == s"$RefDirName/$rel") }.foreach {
+    case (_, rel) => println(s"  ! skipped $RefDirName/$rel (not a valid git checkout with origin)")
+  }
+
 /** CLI entry points parsed by mainargs; each `@main` method maps to a subcommand. */
 object RefRepos:
   @main(doc = "Create .ref/, manifest, and gitignore entry")
@@ -511,6 +679,15 @@ object RefRepos:
       force: Flag
   ): Unit =
     cmdPurge(projectRoot, force.value)
+
+  @main(doc = "Rebuild manifest.yaml from git checkouts under .ref/")
+  def repair(
+      @arg(doc = "Show planned changes without writing manifest.yaml")
+      dryRun: Flag = Flag(false),
+      @arg(doc = "Keep manifest entries whose checkouts are missing on disk")
+      keepOrphans: Flag = Flag(false)
+  ): Unit =
+    cmdRepair(projectRoot, dryRun.value, keepOrphans.value)
 
 /** Mill script entry point; forwards argv to mainargs subcommand dispatch. */
 def main(args: String*): Unit =

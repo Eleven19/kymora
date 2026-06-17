@@ -115,6 +115,7 @@ repos:
 | `update <id> [--ref VAL]` | Fetch and re-pin; without `--ref`, run `refs` and ask user |
 | `remove <id>` | Delete one checkout and manifest entry |
 | `purge --force` | Delete all managed checkouts and clear manifest |
+| `repair [--dry-run] [--keep-orphans]` | Rebuild or create `manifest.yaml` from git checkouts under `.ref/` |
 
 `<id>` is `owner/repo` (e.g. `getkyo/kyo`).
 
@@ -147,6 +148,19 @@ repos:
 
 - One repo: confirm with user, then `remove <id>`
 - All repos: confirm explicitly, then `purge --force`
+
+### Repair a missing or stale manifest
+
+When `.ref/` contains git checkouts but `manifest.yaml` is missing, corrupt, or out of
+sync:
+
+1. Run `ref-repos repair` to scan `.ref/` and rebuild the manifest from on-disk checkouts
+   (reads `origin`, infers the current pin from `HEAD`, preserves artifact hints when ids match)
+2. Use `repair --dry-run` to preview adds, updates, and removals without writing
+3. Use `repair --keep-orphans` to retain manifest entries whose checkouts no longer exist
+
+`ensure` is still the right first step for a brand-new project; `repair` is for recovery
+when checkouts already exist.
 
 ## SCM tool selection
 
@@ -184,4 +198,8 @@ Do not colocate reference clones with jj bookmarks or project worktrees. `.ref/`
 
 # Clean up one checkout
 .claude/skills/reference-repos/ref-repos remove getkyo/kyo
+
+# Rebuild manifest.yaml from existing .ref/ checkouts
+.claude/skills/reference-repos/ref-repos repair
+.claude/skills/reference-repos/ref-repos repair --dry-run
 ```

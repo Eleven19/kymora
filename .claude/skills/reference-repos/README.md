@@ -79,6 +79,7 @@ Run `<command> --help` for flags and positional arguments.
 | `update <id> [--ref VAL]` | Fetch and re-pin an existing checkout |
 | `remove <id>` | Delete one checkout and its manifest entry |
 | `purge --force` | Delete all checkouts and clear the manifest |
+| `repair [--dry-run] [--keep-orphans]` | Rebuild or create `manifest.yaml` from git checkouts under `.ref/` |
 
 `<id>` is `owner/repo` (e.g. `getkyo/kyo`). URLs, SSH URIs, and `owner/repo`
 shorthands are accepted where a repository locator is expected.
@@ -91,6 +92,19 @@ head, then `HEAD` symref, then GitHub's default branch).
 For interactive or agent-driven selection, run `refs` first. It returns JSON with
 up to four recent branches/tags and a prompt to supply a custom value. The same
 pattern applies to `update` when `--ref` is omitted.
+
+### Repairing the manifest
+
+If checkouts exist under `.ref/` but `manifest.yaml` is missing, corrupt, or stale,
+run `repair`. It walks `.ref/` for git repositories, reads each `origin` remote,
+infers the pinned ref from `HEAD`, and writes a fresh manifest. Existing artifact
+hints and `cloned_at` timestamps are preserved when the managed id matches.
+
+```bash
+.claude/skills/reference-repos/ref-repos repair
+.claude/skills/reference-repos/ref-repos repair --dry-run
+.claude/skills/reference-repos/ref-repos repair --keep-orphans
+```
 
 ### SCM tools
 
