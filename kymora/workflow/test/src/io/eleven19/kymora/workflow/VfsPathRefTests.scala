@@ -1,6 +1,7 @@
 package io.eleven19.kymora.workflow
 
 import io.eleven19.kymora.vfs.VPath
+import io.eleven19.kymora.vfs.Vfs
 import kyo.*
 import kyo.test.*
 
@@ -30,5 +31,35 @@ class VfsPathRefTests extends Test[Any]:
     val r = VfsPathRef(VPath("a"), Fingerprint.unsafe("blake3:b"), quick = false)
     val s = summon[Schema[VfsPathRef]].encodeString[Json](r)
     assert(s == "\"vref:v0c:blake3:b:a\"")
+  }
+  "of(path) hashes file contents" in {
+    val path = VPath.root / "etc" / "hello.txt"
+    for
+      fs <- Vfs.inMemory.init
+      _  <- fs.write(path, "hello\n")
+      r  <- VfsPathRef.of(path, fs)
+    yield
+      assert(!r.quick)
+      assert(r.path == path)
+      assert(r.fingerprint.value.startsWith("blake3:"))
+  }
+  "quick(path) sets the quick flag" in {
+    val path = VPath.root / "tmp" / "data.bin"
+    for
+      fs <- Vfs.inMemory.init
+      _  <- fs.write(path, "anything")
+      r  <- VfsPathRef.quick(path, fs)
+    yield assert(r.quick)
+  }
+  "two paths with identical content produce equal fingerprints (content mode)" in {
+    val pa = VPath.root / "a" / "x.txt"
+    val pb = VPath.root / "b" / "y.txt"
+    for
+      fs <- Vfs.inMemory.init
+      _  <- fs.write(pa, "same")
+      _  <- fs.write(pb, "same")
+      a  <- VfsPathRef.of(pa, fs)
+      b  <- VfsPathRef.of(pb, fs)
+    yield assert(a.fingerprint == b.fingerprint)
   }
 end VfsPathRefTests

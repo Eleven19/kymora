@@ -1,6 +1,8 @@
 package io.eleven19.kymora.workflow
 
+import io.eleven19.kymora.vfs.ReadonlyVfs
 import io.eleven19.kymora.vfs.VPath
+import io.eleven19.kymora.vfs.VfsError
 import kyo.*
 
 /** A Mill-style `PathRef` analogue: a virtual filesystem path bundled with the
@@ -19,6 +21,28 @@ final case class VfsPathRef(path: VPath, fingerprint: Fingerprint, quick: Boolea
 
 object VfsPathRef:
   private val Prefix = "vref"
+
+  /** Builds a content-hashed `VfsPathRef` by reading the file at `path` and
+    * fingerprinting its bytes via Blake3.
+    *
+    * The resulting reference is `quick = false`. See spec §3.5: equal contents
+    * across different paths produce equal fingerprints, enabling the engine's
+    * early-cutoff property for downstream tasks.
+    */
+  def of(path: VPath, vfs: ReadonlyVfs)(using Frame): VfsPathRef < (Sync & Abort[VfsError]) =
+    for span <- vfs.readBytes(path)
+    yield VfsPathRef(path, Fingerprint.ofBytes(Chunk.from(span.toArray)), quick = false)
+
+  /** Builds a quick-hashed `VfsPathRef` from `size|mtime` rather than the full
+    * file bytes. Cheaper than [[of]] but only detects size/mtime changes — see
+    * spec §3.5 and §4.5.
+    */
+  def quick(path: VPath, vfs: ReadonlyVfs)(using Frame): VfsPathRef < (Sync & Abort[VfsError]) =
+    for stat <- vfs.stat(path)
+    yield
+      val token      = s"${stat.size.toBytes}|${stat.lastModified.toEpochMillis}"
+      val tokenBytes = Chunk.from(token.getBytes("UTF-8"))
+      VfsPathRef(path, Fingerprint.ofBytes(tokenBytes), quick = true)
 
   def render(ref: VfsPathRef): String =
     val tag = if ref.quick then "v0q" else "v0c"
