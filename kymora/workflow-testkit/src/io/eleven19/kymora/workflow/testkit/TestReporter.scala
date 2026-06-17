@@ -18,7 +18,7 @@ final class TestReporter private (
 ) extends Reporter:
 
   /** Append `event` to the captured buffer. */
-  def onEvent(event: WorkflowEvent): Unit < Async =
+  override def onEvent(event: WorkflowEvent): Unit < Async =
     ref.updateAndGet(_.appended(event)).unit
 
   /** All captured events, in the order they were emitted. */
