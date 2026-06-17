@@ -6,6 +6,9 @@ import kyo.*
 opaque type TaskId = String
 
 object TaskId:
+  inline def apply(inline literal: String): TaskId =
+    ${ io.eleven19.kymora.workflow.macros.TaskIdMacros.literal('literal) }
+
   def parse(s: String): Result[Validation.Reason, TaskId] = Validation.check(s)
   def unsafe(s: String): TaskId                           = s
 
