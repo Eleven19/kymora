@@ -4,7 +4,7 @@ import io.eleven19.kymora.workflow.*
 import io.eleven19.kymora.workflow.store.*
 import kyo.*
 
-/** Minimum-viable sequential scheduler for plan Task 44.
+/** Minimum-viable scheduler for plan Tasks 44-47.
   *
   * Responsibilities:
   *   - Walk a single goal, recursively executing dependencies first.
@@ -18,17 +18,24 @@ import kyo.*
   *                 [[WorkflowEvent.TaskCompleted]], and write a sentinel
   *                 manifest so the next run is a cache HIT.
   *   - Always emit [[WorkflowEvent.TaskQueued]] when a node is first visited.
+  *   - Honor `cfg.parallelism` at the per-node level: a node's dep list is
+  *     resolved via `Async.foreach(..., cfg.parallelism)` when parallelism
+  *     > 1 (real fan-out across the whole DAG is a follow-up — see
+  *     [[resolveDeps]]).
   *
   * Out of scope for this task (covered by later plan tasks):
-  *   - Parallel execution / fan-out (Task 47).
-  *   - `Task.Persistent` semantics (Task 45).
-  *   - `Task.Command` semantics (Task 46).
   *   - Real `TaskRecord[A]` round-trip serialization (Tasks 48-49) — the
   *     `value` field of the cached manifest is not yet decoded; bodies are
   *     re-executed on cache HIT.
-  *   - `cfg.bypass` / `cfg.readOnly` / `cfg.noCache` / `cfg.continueOnError`
-  *     flag handling beyond the simplest "skip cache write if readOnly or
-  *     noCache" path.
+  *   - `cfg.bypass` / `cfg.readOnly` / `cfg.noCache` flag handling beyond
+  *     the simplest "skip cache write if readOnly or noCache" path.
+  *   - `cfg.continueOnError` enforcement: today the field is observable on
+  *     `Workflow.Config` but the scheduler always aborts on the first task
+  *     failure. Error accumulation across siblings lands with the full
+  *     fan-out parallelism follow-up.
+  *   - True fiber-per-node parallelism: `resolveDeps` only bounds concurrency
+  *     within a single node's dep list; siblings of independent sub-graphs
+  *     are still walked one node at a time at the recursive frontier.
   */
 private[workflow] object Scheduler:
 
@@ -37,6 +44,30 @@ private[workflow] object Scheduler:
     * inputsHash computations).
     */
   private final case class NodeResult(value: Any, valueHash: Fingerprint)
+
+  /** Resolve a chunk of dependencies, honoring `cfg.parallelism`.
+    *
+    * For `parallelism <= 1` we fall through to `Kyo.foreach` (sequential).
+    * For `parallelism > 1` we use `Async.foreach` with a bounded concurrency
+    * cap so independent leaves can run concurrently on the JVM. The memo is
+    * an `AtomicRef`, so racing siblings that share a transitive dep stay
+    * consistent (last-writer-wins on identical [[NodeResult]] values).
+    *
+    * Simplification (documented in the file header): real fan-out parallelism
+    * across the whole DAG is bounded only by this single-level call. A node
+    * that is the only entry to a sub-graph still resolves that sub-graph
+    * sequentially at each level. A future Task will lift this to true
+    * fiber-per-node scheduling.
+    */
+  private def resolveDeps(
+      deps: Chunk[Task[?]],
+      memo: AtomicRef[Map[TaskId, NodeResult]],
+      cfg: Workflow.Config,
+  )(using Frame): Chunk[NodeResult] < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+    if cfg.parallelism <= 1 || deps.size <= 1 then
+      Kyo.foreach(deps)(d => runNode(d, memo))
+    else
+      Async.foreach(deps, cfg.parallelism)(d => runNode(d, memo))
 
   /** Execute a single goal under the ambient `Workflow.Config`. */
   def execute[A](goal: Task[A])(using
@@ -134,8 +165,8 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
   )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     for
-      // Run dependencies first (sequentially for now — parallelism is Task 47).
-      depResults <- Kyo.foreach(Chunk.from(task.deps))(d => runNode(d, memo))
+      // Run dependencies first, honoring cfg.parallelism (Task 47).
+      depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
       depFps      = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
       // Compute hashes.
@@ -210,7 +241,7 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
   )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     for
-      depResults <- Kyo.foreach(Chunk.from(task.deps))(d => runNode(d, memo))
+      depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
       depFps      = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
       bodyHash    = Hashing.bodyHash(task.id, task.version)
@@ -280,7 +311,7 @@ private[workflow] object Scheduler:
   )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
     val started = java.time.Instant.now()
     for
-      depResults <- Kyo.foreach(Chunk.from(task.deps))(d => runNode(d, memo))
+      depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
       depIds      = depResults.map(r => taskIdOf(task.deps, depResults, r))
       _          <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
