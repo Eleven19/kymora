@@ -10,6 +10,9 @@ object KymoraVersions:
     /** Minimum required Kyo version. Later snapshot or stable releases are acceptable. */
     val Kyo: String = "1.0.0-RC2+88-0059a365-SNAPSHOT"
 
+    /** Pinned mainargs version for CLI argument parsing. */
+    val mainargs: String = "0.7.6"
+
     /** Pinned scribe version for cross-platform logging (JVM + JS + Native). */
     val Scribe: String = "3.16.1"
 
