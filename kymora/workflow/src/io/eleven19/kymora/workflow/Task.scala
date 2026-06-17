@@ -1,5 +1,6 @@
 package io.eleven19.kymora.workflow
 
+import io.eleven19.kymora.vfs.VPath
 import kyo.*
 
 sealed trait Task[+A] derives CanEqual:
@@ -7,6 +8,28 @@ sealed trait Task[+A] derives CanEqual:
   def version: TaskVersion
 
 object Task:
+  /** File/directory input. Re-evaluated each run (path content rehashed via VFS).
+    * Contributes to dependents' cache keys via the embedded fingerprint.
+    *
+    * Engine constants:
+    *   version = TaskVersion.v1
+    *   bodyHash = blake3("source:v1")
+    */
+  final class Source private[workflow] (
+      val id: TaskId,
+      private[workflow] val path: VPath,
+      private[workflow] val quick: Boolean,
+  ) extends Task[VPathRef]:
+    val version: TaskVersion = TaskVersion.v1
+  end Source
+
+  object Source:
+    def init(id: String)(path: VPath)(using scope: TaskScope): Source =
+      new Source(TaskId.unsafe(scope.qualify(id).value), path, quick = false)
+    def quick(id: String)(path: VPath)(using scope: TaskScope): Source =
+      new Source(TaskId.unsafe(scope.qualify(id).value), path, quick = true)
+  end Source
+
   /** Default memoized variant — cached on (id, version, dep fingerprints).
     * Public via Task.init smart constructors.
     */
