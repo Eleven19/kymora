@@ -83,6 +83,14 @@ trait KyoTestModule extends TestModule {
 
   override def testFramework: T[String] = "kyo.test.runner.SbtFramework"
 
+  // Kyo's schema derivation uses LambdaMetafactory against private fields in
+  // java.base, which JDK 17+ closes by default. Without --add-opens the
+  // derivation hangs (encode loop on first Schema construction) instead of
+  // failing cleanly. Apply to every kyo-test JVM run.
+  override def forkArgs: T[Seq[String]] = Task {
+    super.forkArgs() ++ Seq("--add-opens", "java.base/java.lang=ALL-UNNAMED")
+  }
+
   override def mandatoryMvnDeps: T[Seq[Dep]] = Task {
     super.mandatoryMvnDeps() ++ Seq(
       // kyo-test-api/-runner declare the kyo effect modules as `provided`, so the
