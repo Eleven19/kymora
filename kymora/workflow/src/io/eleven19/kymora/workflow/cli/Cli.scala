@@ -33,7 +33,7 @@ object Cli:
       parser: Parser[P],
       help: Help[P],
       frame: Frame,
-  ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError | CliParseError]) =
+  ): A < (Async & Workflow.Services & Abort[WorkflowError | CliParseError]) =
     parser.parse(tokens) match
       case Right((p, _remainingArgs)) =>
         Workflow.run(task(p))
@@ -54,7 +54,7 @@ object Cli:
       commands: Cli.Command[?, A]*,
   )(tokens: Seq[String])(using
       frame: Frame,
-  ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError | CliParseError]) =
+  ): A < (Async & Workflow.Services & Abort[WorkflowError | CliParseError]) =
     val cmds = commands.toVector
     tokens.toList match
       case Nil =>
@@ -81,7 +81,7 @@ object Cli:
   ):
     private[cli] def runRest(rest: List[String])(using
         Frame,
-    ): A < (Async & Env[Workflow.Config] & Abort[WorkflowError | CliParseError]) =
+    ): A < (Async & Workflow.Services & Abort[WorkflowError | CliParseError]) =
       runWith(task, rest)(using parser, help, summon[Frame])
   end Command
 

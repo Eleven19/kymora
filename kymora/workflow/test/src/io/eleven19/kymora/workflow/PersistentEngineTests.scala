@@ -9,7 +9,7 @@ class PersistentEngineTests extends Test[Any]:
     val goal = Task.persistent("p")(42)
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(goal))
+      result <- driver.run(goal)
     yield assert(result == 42)
   }
   "Task.persistent (1 dep) chains through scheduler" in {
@@ -17,7 +17,7 @@ class PersistentEngineTests extends Test[Any]:
     val goal = Task.persistent("p")(dep) { x => x + 1 }
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(goal))
+      result <- driver.run(goal)
     yield assert(result == 11)
   }
 end PersistentEngineTests

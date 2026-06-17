@@ -13,13 +13,13 @@ class AgentSkillsTests extends Test[Any]:
   "summarise skill runs end-to-end" in {
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(Skills.summarise))
+      result <- driver.run(Skills.summarise)
     yield assert(result.toString.contains("summary"))
   }
   "compare skill runs end-to-end" in {
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(Skills.compare))
+      result <- driver.run(Skills.compare)
     yield assert(result.toString.contains("compare"))
   }
 end AgentSkillsTests

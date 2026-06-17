@@ -11,8 +11,8 @@ class ParallelismTests extends Test[Any]:
     val c = Task.init("c")(a, b) { (x, y) => x + y }
     for
       driver <- WorkflowTestDriver.init
-      cfg     = driver.config.copy(parallelism = 2)
-      result <- Env.run(cfg)(driver.run(c))
+      services = driver.services.copy(config = driver.config.copy(parallelism = 2))
+      result  <- Workflow.Services.provide(services)(Workflow.run(c))
     yield assert(result == 3)
   }
   "Independent leaves both execute under parallelism=1 (sequential fallback)" in {
@@ -25,15 +25,15 @@ class ParallelismTests extends Test[Any]:
     val c = Task.init("c")(a, b) { (x, y) => x + y }
     for
       driver <- WorkflowTestDriver.init
-      cfg     = driver.config.copy(parallelism = 1)
-      result <- Env.run(cfg)(driver.run(c))
+      services = driver.services.copy(config = driver.config.copy(parallelism = 1))
+      result  <- Workflow.Services.provide(services)(Workflow.run(c))
     yield assert(result == 30)
   }
   "Failed body aborts run by default (continueOnError=false)" in {
     val goal = Task.init("bad") { throw new RuntimeException("boom"); 0 }
     for
       driver  <- WorkflowTestDriver.init
-      attempt <- Abort.run[WorkflowError](Env.run(driver.config)(driver.run(goal)))
+      attempt <- Abort.run[WorkflowError](driver.run(goal))
     yield assert(attempt.isFailure)
   }
   "continueOnError=true is observable via Config" in {

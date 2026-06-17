@@ -9,7 +9,7 @@ class EngineTests extends Test[Any]:
     val goal = Task.init("foo")(42)
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(goal))
+      result <- driver.run(goal)
     yield assert(result == 42)
   }
   "Chained Task.Cached propagates values from deps" in {
@@ -18,15 +18,15 @@ class EngineTests extends Test[Any]:
     val c = Task.init("c")(b) { x => x * 2 }
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(c))
+      result <- driver.run(c)
     yield assert(result == 22)
   }
   "Second invocation hits the cache (emits TaskCached)" in {
     val goal = Task.init("foo")(42)
     for
       driver <- WorkflowTestDriver.init
-      _      <- Env.run(driver.config)(driver.run(goal))
-      _      <- Env.run(driver.config)(driver.run(goal))
+      _      <- driver.run(goal)
+      _      <- driver.run(goal)
       events <- driver.events
     yield
       assert(events.collect { case e: WorkflowEvent.TaskCached => e }.size == 1)

@@ -12,7 +12,7 @@ class SmileBuildTests extends Test[Any]:
   "Build.app compile depends on Build.core.compile (transitively)" in {
     for
       driver <- WorkflowTestDriver.init
-      _      <- Env.run(driver.config)(driver.run(Build.app.compile))
+      _      <- driver.run(Build.app.compile)
       events <- driver.events
     yield
       val completed = events.collect { case e: WorkflowEvent.TaskCompleted => e.id }
@@ -22,7 +22,7 @@ class SmileBuildTests extends Test[Any]:
   "Build.app.jar runs end-to-end" in {
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(Build.app.jar))
+      result <- driver.run(Build.app.jar)
     yield assert(result.contains("app"))
   }
 end SmileBuildTests

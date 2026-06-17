@@ -60,7 +60,7 @@ class ParameterizedTaskTests extends Test[Any]:
     val goal = factory(8080)
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(goal))
+      result <- driver.run(goal)
     yield assert(result == "port=8080")
   }
   "Task.command[A, P] keeps paramHash empty (commands never cache)" in {

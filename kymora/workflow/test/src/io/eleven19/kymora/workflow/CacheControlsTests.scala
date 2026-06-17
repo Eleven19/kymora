@@ -11,7 +11,7 @@ class CacheControlsTests extends Test[Any]:
       driver <- WorkflowTestDriver.init
       _      <- driver.store.write(CacheKey("a"), Chunk.from("x".getBytes), Maybe.empty)
       _      <- driver.store.write(CacheKey("b"), Chunk.from("y".getBytes), Maybe.empty)
-      _      <- Env.run(driver.config)(Workflow.purge())
+      _      <- Env.run(driver.store)(Workflow.purge())
       a      <- driver.store.read(CacheKey("a"))
       b      <- driver.store.read(CacheKey("b"))
     yield
@@ -24,7 +24,7 @@ class CacheControlsTests extends Test[Any]:
       _      <- driver.store.write(CacheKey("kymora/vfs/jvm/compile"), Chunk.from("x".getBytes), Maybe.empty)
       _      <- driver.store.write(CacheKey("kymora/core/jvm/compile"), Chunk.from("y".getBytes), Maybe.empty)
       _      <- driver.store.write(CacheKey("other/thing"), Chunk.from("z".getBytes), Maybe.empty)
-      _      <- Env.run(driver.config)(Workflow.clean("kymora/"))
+      _      <- Env.run(driver.store)(Workflow.clean("kymora/"))
       a      <- driver.store.read(CacheKey("kymora/vfs/jvm/compile"))
       b      <- driver.store.read(CacheKey("kymora/core/jvm/compile"))
       c      <- driver.store.read(CacheKey("other/thing"))

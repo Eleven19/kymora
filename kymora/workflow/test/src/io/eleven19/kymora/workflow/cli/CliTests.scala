@@ -22,7 +22,7 @@ class CliTests extends Test[Any]:
       Abort.recover[CliParseError](e => s"err:$e")(Cli.runWith(task, Seq("--port", "8080")))
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(invocation)
+      result <- Workflow.Services.provide(driver.services)(invocation)
     yield assert(result == "port=8080")
   }
   "Cli.runWith uses argument defaults when tokens are empty" in {
@@ -32,7 +32,7 @@ class CliTests extends Test[Any]:
       Abort.recover[CliParseError](e => s"err:$e")(Cli.runWith(task, Seq.empty))
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(invocation)
+      result <- Workflow.Services.provide(driver.services)(invocation)
     yield assert(result == "port=4")
   }
   "Cli.runWith reports CliParseError.Failed on bad input" in {
@@ -45,7 +45,7 @@ class CliTests extends Test[Any]:
       }(Cli.runWith(task, Seq("--port", "not-a-number")))
     for
       driver <- WorkflowTestDriver.init
-      out    <- Env.run(driver.config)(invocation)
+      out    <- Workflow.Services.provide(driver.services)(invocation)
     yield assert(out == "failed")
   }
 end CliTests

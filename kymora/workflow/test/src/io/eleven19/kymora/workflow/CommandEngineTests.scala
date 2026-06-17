@@ -9,7 +9,7 @@ class CommandEngineTests extends Test[Any]:
     val goal = Task.command("run")("hello")
     for
       driver <- WorkflowTestDriver.init
-      result <- Env.run(driver.config)(driver.run(goal))
+      result <- driver.run(goal)
     yield assert(result == "hello")
   }
   "Command body runs on every invocation (no caching)" in {
@@ -17,9 +17,9 @@ class CommandEngineTests extends Test[Any]:
     val goal  = Task.command("run") { val _ = count.incrementAndGet(); 42 }
     for
       driver <- WorkflowTestDriver.init
-      _      <- Env.run(driver.config)(driver.run(goal))
-      _      <- Env.run(driver.config)(driver.run(goal))
-      _      <- Env.run(driver.config)(driver.run(goal))
+      _      <- driver.run(goal)
+      _      <- driver.run(goal)
+      _      <- driver.run(goal)
     yield assert(count.get() == 3)
   }
   "Command depends on Task.Cached; dep memoizes within one run, command always runs" in {
@@ -31,8 +31,8 @@ class CommandEngineTests extends Test[Any]:
     }
     for
       driver <- WorkflowTestDriver.init
-      _      <- Env.run(driver.config)(driver.run(goal))
-      _      <- Env.run(driver.config)(driver.run(goal))
+      _      <- driver.run(goal)
+      _      <- driver.run(goal)
     yield
       assert(cmdCount.get() == 2)   // command body always runs
       // dep should re-run because the in-process memo doesn't persist across runs
