@@ -30,6 +30,29 @@ object Task:
       new Source(TaskId.unsafe(scope.qualify(id).value), path, quick = true)
   end Source
 
+  /** Pure-value input. Re-evaluated each run; contributes to dependents'
+    * cache keys via the hash of the read value (not stored as a blob).
+    *
+    * Engine constants:
+    *   version = TaskVersion.v1
+    *   bodyHash = blake3("input:v1")
+    */
+  final class Input[A] private[workflow] (
+      val id: TaskId,
+      private[workflow] val read: () => A < (Async & Abort[Throwable]),
+      private[workflow] val hashable: Hashable[A],
+  ) extends Task[A]:
+    val version: TaskVersion = TaskVersion.v1
+  end Input
+
+  object Input:
+    def init[A](id: String)(read: => A < (Async & Abort[Throwable]))(using
+        scope: TaskScope,
+        h: Hashable[A],
+    ): Input[A] =
+      new Input[A](TaskId.unsafe(scope.qualify(id).value), () => read, h)
+  end Input
+
   /** Default memoized variant — cached on (id, version, dep fingerprints).
     * Public via Task.init smart constructors.
     */
