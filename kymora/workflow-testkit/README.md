@@ -11,6 +11,9 @@ test code would force every consumer to reinvent them.
 
 ## What's here
 
+- `WorkflowSpec` — `kyo.test.Test[Any]` base class that adds a `test`
+  helper applying a default per-test timeout (3 min). Drop a wedged test
+  with a `[TIMEOUT]` marker instead of hanging the JVM.
 - `WorkflowTestDriver.init` — single-call harness composing the testkit
   primitives.
 - `InMemoryCacheStore.init` — `VfsDirStore` over an in-memory VFS.
@@ -27,12 +30,20 @@ test code would force every consumer to reinvent them.
 import io.eleven19.kymora.workflow.*
 import io.eleven19.kymora.workflow.testkit.*
 import kyo.*
+import kyo.test.*
 
-for
-  driver <- WorkflowTestDriver.init
-  result <- Env.run(driver.config)(driver.run(myGoal))
-  events <- driver.events
-yield (result, events)
+class MyEngineSpec extends WorkflowSpec:
+  test("goal runs end-to-end") {
+    for
+      driver <- WorkflowTestDriver.init
+      result <- driver.run(myGoal)
+      events <- driver.events
+    yield assert(result == expected)
+  }
+
+  // Raw kyo-test syntax is still available alongside `test(...)`:
+  "no auto-timeout on raw `in`" in { ... }
+  "explicit per-test timeout".timeout(10.seconds) in { ... }
 ```
 
 ## Gotchas

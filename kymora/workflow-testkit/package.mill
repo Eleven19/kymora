@@ -7,6 +7,14 @@ trait WorkflowTestkitModule extends _root_.build.CommonScalaModule
     with _root_.build.PublishSupport {
 
     override def artifactName = "kymora-workflow-testkit"
+
+    // The testkit ships re-usable test base classes (e.g. WorkflowSpec)
+    // and depends on kyo-test-api at compile time. Downstream consumers
+    // adding workflow-testkit as a test dependency get kyo-test wired up
+    // automatically.
+    def mvnDeps = Seq(
+        mvn"io.getkyo::kyo-test-api::${_root_.build.KymoraVersions.Kyo}",
+    )
 }
 
 trait WorkflowTestkitTestModule extends _root_.build.CommonScalaTestModule {
