@@ -65,8 +65,8 @@ private[workflow] object Scheduler:
     }
 
   /** Execute a node from scratch (no memo entry). Dispatches on the task
-    * kind. Persistent / Command are not implemented in this task — they
-    * surface a `WorkflowError.TaskFailed` describing the gap.
+    * kind. Command is not implemented in this task — it surfaces a
+    * `WorkflowError.TaskFailed` describing the gap.
     */
   private def runFreshNode(
       task: Task[?],
@@ -79,11 +79,7 @@ private[workflow] object Scheduler:
                     case src: Task.Source        => runSource(src, cfg)
                     case in: Task.Input[?]       => runInput(in, cfg)
                     case c: Task.Cached[?]       => runCached(c, memo, cfg)
-                    case _: Task.Persistent[?]   =>
-                      Abort.fail[WorkflowError](WorkflowError.TaskFailed(
-                        task.id,
-                        "Task.Persistent execution not yet implemented (plan Task 45).",
-                      ))
+                    case p: Task.Persistent[?]   => runPersistent(p, memo, cfg)
                     case _: Task.Command[?]      =>
                       Abort.fail[WorkflowError](WorkflowError.TaskFailed(
                         task.id,
@@ -179,6 +175,75 @@ private[workflow] object Scheduler:
     * a sentinel manifest so the next run is a HIT. */
   private def cacheMiss(
       task: Task.Cached[?],
+      depArgs: IndexedSeq[Any],
+      depFps: Chunk[Hashing.DepFingerprint],
+      bodyHash: Fingerprint,
+      expected: Fingerprint,
+      key: CacheKey,
+      cfg: Workflow.Config,
+  )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
+    val started = java.time.Instant.now()
+    val depIds  = depFps.map(_.id)
+    for
+      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
+      ctx    = newTaskContext()
+      value <- runBody(task.id, task.body(ctx, depArgs))
+      vh     = valueFingerprint(value)
+      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+      _     <-
+        if cfg.readOnly || cfg.noCache then (() : Unit < Async)
+        else writeSentinel(cfg, key, bodyHash, expected, vh, task.version)
+    yield NodeResult(value, vh)
+
+  // ---------------------------------------------------------------------
+  // Task.Persistent — mirrors Task.Cached structurally for now
+  // ---------------------------------------------------------------------
+
+  /** Persistent semantics differ from Cached only in `.dest/` retention
+    * (the directory persists across rebuilds and is re-presented to the
+    * body via a per-key advisory lock). The current scheduler does not
+    * yet acquire a real workspace (see Scheduler simplification notes),
+    * so this branch is structurally identical to [[runCached]]. We use
+    * `openPersistentWorkspace` (rather than `openWorkspace`) only as a
+    * placeholder for the eventual real wiring; for now no workspace is
+    * actually opened in either branch.
+    */
+  private def runPersistent(
+      task: Task.Persistent[?],
+      memo: AtomicRef[Map[TaskId, NodeResult]],
+      cfg: Workflow.Config,
+  )(using Frame): NodeResult < (Async & Env[Workflow.Config] & Abort[WorkflowError]) =
+    for
+      depResults <- Kyo.foreach(Chunk.from(task.deps))(d => runNode(d, memo))
+      depArgs     = depResults.toIndexedSeq.map(_.value)
+      depFps      = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
+      bodyHash    = Hashing.bodyHash(task.id, task.version)
+      expected    = Hashing.inputsHash(task.id, bodyHash, depFps)
+      key         = CacheKey.fromTaskId(task.id)
+      existing   <- readManifest(cfg, key)
+      result     <- existing match
+                      case kyo.Present(_) if !cfg.noCache && !cfg.bypass.contains(task.id) =>
+                        persistentCacheHit(task, depArgs, expected, cfg)
+                      case _ =>
+                        persistentCacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg)
+    yield result
+  end runPersistent
+
+  private def persistentCacheHit(
+      task: Task.Persistent[?],
+      depArgs: IndexedSeq[Any],
+      expected: Fingerprint,
+      cfg: Workflow.Config,
+  )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
+    for
+      _     <- cfg.reporter.onEvent(WorkflowEvent.TaskCached(task.id, expected))
+      ctx    = newTaskContext()
+      value <- runBody(task.id, task.body(ctx, depArgs))
+      vh     = valueFingerprint(value)
+    yield NodeResult(value, vh)
+
+  private def persistentCacheMiss(
+      task: Task.Persistent[?],
       depArgs: IndexedSeq[Any],
       depFps: Chunk[Hashing.DepFingerprint],
       bodyHash: Fingerprint,
