@@ -89,18 +89,23 @@ object VfsDirStore:
 
   private final class Impl(root: VPath, vfs: Vfs) extends CacheStore:
 
-    /** Per-key locks for [[openPersistentWorkspace]].
+    /** Per-key permits for [[openPersistentWorkspace]].
       *
       * Scoped to this `Impl` instance (one `VfsDirStore`/`root`). Two stores
       * that happen to use the same `CacheKey.value` do not contend, because
       * their `.dest/` paths live under different roots and never touch the
       * same files.
       *
+      * `Semaphore(1, fair = true)` rather than `ReentrantLock`: Kyo fibers can
+      * acquire on one carrier thread and release on another (Scope finalizer),
+      * which `ReentrantLock` rejects with `IllegalMonitorStateException`.
+      * Semaphore permits have no owning-thread requirement.
+      *
       * Real cross-process advisory locking would need an OS file lock; this
       * in-process map is enough for v1 correctness inside a single JVM.
       */
     private val persistentLocks =
-      new java.util.concurrent.ConcurrentHashMap[String, java.util.concurrent.locks.ReentrantLock]()
+      new java.util.concurrent.ConcurrentHashMap[String, java.util.concurrent.Semaphore]()
 
     def read(key: CacheKey): Maybe[StoredManifest] < (Async & Abort[StoreError]) =
       val p = manifestPath(root, key)
@@ -188,14 +193,14 @@ object VfsDirStore:
       val p = destPath(root, key)
       Abort.recover[VfsError](e => Abort.fail(StoreError.fromThrowable(p.show, e))):
         Sync.defer {
-          val lock = persistentLocks.computeIfAbsent(
+          val permit = persistentLocks.computeIfAbsent(
             key.value,
-            _ => new java.util.concurrent.locks.ReentrantLock()
+            _ => new java.util.concurrent.Semaphore(1, true)
           )
-          lock.lock()
-          lock
-        }.map { lock =>
-          Scope.ensure(Sync.defer(lock.unlock())).andThen(p)
+          permit.acquireUninterruptibly()
+          permit
+        }.map { permit =>
+          Scope.ensure(Sync.defer(permit.release())).andThen(p)
         }
   end Impl
 end VfsDirStore

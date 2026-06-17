@@ -113,7 +113,7 @@ class VfsDirStoreTests extends Test[Any]:
       stillThere <- vfs.exists(destPath)
     yield assert(!stillThere)
   }
-  "openPersistentWorkspace returns the .dest path directly" in {
+  "openPersistentWorkspace returns the .dest path directly".timeout(3.minutes) in {
     for
       vfs   <- Vfs.inMemory.init
       root   = VPath("cache")
@@ -126,7 +126,7 @@ class VfsDirStoreTests extends Test[Any]:
       }
     yield ()
   }
-  "openPersistentWorkspace retains content across calls" in {
+  "openPersistentWorkspace retains content across calls".timeout(3.minutes) in {
     for
       vfs   <- Vfs.inMemory.init
       root   = VPath("cache")

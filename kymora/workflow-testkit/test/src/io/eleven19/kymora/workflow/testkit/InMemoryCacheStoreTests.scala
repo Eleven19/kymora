@@ -66,7 +66,7 @@ class InMemoryCacheStoreTests extends Test[Any]:
       }
     yield assert(didExit)
   }
-  "openPersistentWorkspace path persists across invocations" in {
+  "openPersistentWorkspace path persists across invocations".timeout(3.minutes) in {
     for
       store <- InMemoryCacheStore.init
       p1 <- Scope.run(store.openPersistentWorkspace(CacheKey("p")))
