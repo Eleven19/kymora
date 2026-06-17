@@ -19,6 +19,9 @@ out/
 # OS
 .DS_Store
 
+# Reference repositories for agent exploration (managed by reference-repos skill)
+.ref/
+
 # Scala
 *.class
 *.tasty
