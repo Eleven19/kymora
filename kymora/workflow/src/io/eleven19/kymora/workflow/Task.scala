@@ -26,6 +26,26 @@ object Task:
     val version: TaskVersion = TaskVersion.v1
   end Source
 
+  /** Ordered multi-path input (Mill `Sources` analogue). Each path is read +
+    * hashed via the ambient `Env[Vfs]`; the resulting `Chunk[VPathRef]`
+    * preserves input order. The dep-side aggregate fingerprint is
+    * order-sensitive (reordering or duplicating paths invalidates downstream
+    * caches).
+    *
+    * Engine constants:
+    *   version = TaskVersion.v1
+    *   bodyHash = blake3("sources:v1")
+    *
+    * Built via [[Task.sources]] / [[Task.sourcesQuick]].
+    */
+  final class Sources @publicInBinary private[workflow] (
+      val id: TaskId,
+      private[workflow] val paths: Chunk[VPath],
+      private[workflow] val quick: Boolean,
+  ) extends Task[Chunk[VPathRef]]:
+    val version: TaskVersion = TaskVersion.v1
+  end Sources
+
   /** Pure-value input. Re-evaluated each run; contributes to dependents'
     * cache keys via the hash of the read value (not stored as a blob).
     *
@@ -54,6 +74,18 @@ object Task:
     */
   inline def sourceQuick(inline id: String)(path: VPath)(using scope: TaskScope): Source =
     new Source(TaskId.unsafe(scope.qualify(id).value), path, quick = true)
+
+  /** Build a [[Sources]] task under the ambient [[TaskScope]]. Each path is
+    * read + content-hashed on every run via the ambient `Env[Vfs]`.
+    */
+  inline def sources(inline id: String)(paths: VPath*)(using scope: TaskScope): Sources =
+    new Sources(TaskId.unsafe(scope.qualify(id).value), Chunk.from(paths), quick = false)
+
+  /** Build a [[Sources]] task with the "quick" flag set — each path uses the
+    * cheaper size+mtime token rather than content bytes.
+    */
+  inline def sourcesQuick(inline id: String)(paths: VPath*)(using scope: TaskScope): Sources =
+    new Sources(TaskId.unsafe(scope.qualify(id).value), Chunk.from(paths), quick = true)
 
   /** Build an [[Input]] task under the ambient [[TaskScope]]. The `read`
     * thunk is re-evaluated on every run; its value is hashed via the

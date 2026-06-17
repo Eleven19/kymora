@@ -16,5 +16,5 @@ object ConsoleObserver extends Observer:
     case WorkflowEvent.TaskCancelled(id, reason) => s"TASK CANCEL ${id.value} — $reason"
 
   override def onEvent(event: WorkflowEvent): Unit < Async =
-    Sync.defer(java.lang.System.out.println(format(event)))
+    Console.printLine(format(event))
 end ConsoleObserver

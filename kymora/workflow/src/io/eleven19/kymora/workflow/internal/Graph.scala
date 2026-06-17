@@ -51,6 +51,7 @@ private[workflow] object Graph:
     case p: Task.Persistent[?] => p.deps
     case k: Task.Command[?]    => k.deps
     case _: Task.Source        => Nil
+    case _: Task.Sources       => Nil
     case _: Task.Input[?]      => Nil
 
   private def kindOf(t: Task[?]): String = t match
@@ -58,6 +59,7 @@ private[workflow] object Graph:
     case _: Task.Persistent[?] => "Task.Persistent"
     case _: Task.Command[?]    => "Task.Command"
     case _: Task.Source        => "Source"
+    case _: Task.Sources       => "Sources"
     case _: Task.Input[?]      => "Input"
 
 end Graph

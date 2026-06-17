@@ -32,5 +32,5 @@ object JsonLinesObserver extends Observer:
   end toJson
 
   override def onEvent(event: WorkflowEvent): Unit < Async =
-    Sync.defer(java.lang.System.out.println(toJson(event)))
+    Console.printLine(toJson(event))
 end JsonLinesObserver

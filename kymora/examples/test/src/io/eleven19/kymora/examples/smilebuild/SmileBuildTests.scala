@@ -8,17 +8,19 @@ import kyo.test.*
 
 class SmileBuildTests extends Test[Any]:
 
-  /** Each module's `sources` task points at `repo/<name>/src`. Now that
-    * `Task.Source` actually reads the file via the ambient `Env[Vfs]`,
-    * tests must populate those paths in the driver's in-memory VFS
-    * before running the build graph. */
+  /** Each module's `sources` task is a [[Task.Sources]] pointing at
+    * `repo/<name>/src` AND `repo/<name>/resources`. The engine reads each
+    * path via the ambient `Env[Vfs]`, so tests seed both files before
+    * running the build graph. */
   private def seedSources(driver: WorkflowTestDriver): Unit < (Async & Abort[Throwable]) =
     val modules = Seq(Build.core, Build.app)
     Kyo.foreach(Chunk.from(modules))(m =>
-      driver.vfs.writeBytes(
-        VPath("repo", m.name, "src"),
-        Span.from(s"sources for ${m.name}".getBytes),
-        createFolders = true,
+      Kyo.foreach(Chunk("src", "resources"))(leaf =>
+        driver.vfs.writeBytes(
+          VPath("repo", m.name, leaf),
+          Span.from(s"$leaf for ${m.name}".getBytes),
+          createFolders = true,
+        ),
       ),
     ).unit
 

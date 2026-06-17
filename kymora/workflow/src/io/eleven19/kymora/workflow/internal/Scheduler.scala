@@ -117,6 +117,7 @@ private[workflow] object Scheduler:
       _        <- observer.onEvent(WorkflowEvent.TaskQueued(task.id))
       result   <- task match
                     case src: Task.Source        => runSource(src, observer)
+                    case srcs: Task.Sources      => runSources(srcs, observer)
                     case in: Task.Input[?]       => runInput(in, observer)
                     case c: Task.Cached[?]       => runCached(c, memo, cfg, observer)
                     case p: Task.Persistent[?]   => runPersistent(p, memo, cfg, observer)
@@ -140,18 +141,46 @@ private[workflow] object Scheduler:
       src: Task.Source,
       observer: Observer,
   )(using Frame): NodeResult < (Async & Env[Vfs] & Abort[WorkflowError]) =
-    val started = java.time.Instant.now()
     for
-      vfs   <- Env.get[Vfs]
-      _     <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started))
-      ref   <- runBody[VPathRef](
-                 src.id,
-                 if src.quick then VPathRef.quick(src.path, vfs)
-                 else VPathRef.of(src.path, vfs),
-               )
-      _     <- observer.onEvent(WorkflowEvent.TaskCompleted(src.id, ref.fingerprint, 0L))
+      vfs     <- Env.get[Vfs]
+      started <- Clock.now
+      _       <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started.toJava))
+      ref     <- runBody[VPathRef](
+                   src.id,
+                   if src.quick then VPathRef.quick(src.path, vfs)
+                   else VPathRef.of(src.path, vfs),
+                 )
+      _       <- observer.onEvent(WorkflowEvent.TaskCompleted(src.id, ref.fingerprint, 0L))
     yield NodeResult(ref, ref.fingerprint)
   end runSource
+
+  /** Multi-path Source — Mill `Sources` analogue. Reads each path's bytes
+    * (or size+mtime token when `quick`) through the ambient `Env[Vfs]` and
+    * returns a [[Chunk]] of [[VPathRef]]s preserving input order. The
+    * scheduler's NodeResult.valueHash is the order-sensitive aggregate
+    * fingerprint over the per-path fingerprints — see
+    * [[VPathRef.aggregateFingerprint]]; matching `Hashable[Chunk[VPathRef]]`
+    * lives in the same companion.
+    */
+  private def runSources(
+      src: Task.Sources,
+      observer: Observer,
+  )(using Frame): NodeResult < (Async & Env[Vfs] & Abort[WorkflowError]) =
+    for
+      vfs     <- Env.get[Vfs]
+      started <- Clock.now
+      _       <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started.toJava))
+      refs    <- runBody[Chunk[VPathRef]](
+                   src.id,
+                   Kyo.foreach(src.paths)(p =>
+                     if src.quick then VPathRef.quick(p, vfs)
+                     else VPathRef.of(p, vfs),
+                   ),
+                 )
+      agg      = VPathRef.aggregateFingerprint(refs)
+      _       <- observer.onEvent(WorkflowEvent.TaskCompleted(src.id, agg, 0L))
+    yield NodeResult(refs, agg)
+  end runSources
 
   /** Input nodes: run the `read` thunk and hash the value via the embedded
     * `Hashable`.
@@ -160,10 +189,10 @@ private[workflow] object Scheduler:
       in: Task.Input[?],
       observer: Observer,
   )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
-    val started = java.time.Instant.now()
     for
-      _     <- observer.onEvent(WorkflowEvent.TaskStarted(in.id, Chunk.empty, started))
-      value <- runBody(in.id, in.read())
+      started <- Clock.now
+      _       <- observer.onEvent(WorkflowEvent.TaskStarted(in.id, Chunk.empty, started.toJava))
+      value   <- runBody(in.id, in.read())
       // Hashable.hash takes A, but in.hashable is Hashable[?] — Hashable is
       // contravariant in effect (a hash function), so a cast is safe here.
       vh     = in.hashable.asInstanceOf[Hashable[Any]].hash(value)
@@ -229,15 +258,15 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
       observer: Observer,
   )(using Frame): NodeResult < (Async & Env[CacheStore] & Abort[WorkflowError]) =
-    val started = java.time.Instant.now()
-    val depIds  = depFps.map(_.id)
+    val depIds = depFps.map(_.id)
     for
-      _     <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
-      ctx    = newTaskContext()
-      value <- runBody(task.id, task.body(ctx, depArgs))
-      vh     = valueFingerprint(value)
-      _     <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
-      _     <-
+      started <- Clock.now
+      _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
+      ctx      = newTaskContext()
+      value   <- runBody(task.id, task.body(ctx, depArgs))
+      vh       = valueFingerprint(value)
+      _       <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+      _       <-
         if cfg.readOnly || cfg.noCache then (() : Unit < Async)
         else writeSentinel(key, bodyHash, expected, vh, task.version)
     yield NodeResult(value, vh)
@@ -302,15 +331,15 @@ private[workflow] object Scheduler:
       cfg: Workflow.Config,
       observer: Observer,
   )(using Frame): NodeResult < (Async & Env[CacheStore] & Abort[WorkflowError]) =
-    val started = java.time.Instant.now()
-    val depIds  = depFps.map(_.id)
+    val depIds = depFps.map(_.id)
     for
-      _     <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
-      ctx    = newTaskContext()
-      value <- runBody(task.id, task.body(ctx, depArgs))
-      vh     = valueFingerprint(value)
-      _     <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
-      _     <-
+      started <- Clock.now
+      _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
+      ctx      = newTaskContext()
+      value   <- runBody(task.id, task.body(ctx, depArgs))
+      vh       = valueFingerprint(value)
+      _       <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+      _       <-
         if cfg.readOnly || cfg.noCache then (() : Unit < Async)
         else writeSentinel(key, bodyHash, expected, vh, task.version)
     yield NodeResult(value, vh)
@@ -336,12 +365,12 @@ private[workflow] object Scheduler:
   )(using
       Frame,
   ): NodeResult < (Async & Workflow.Services & Abort[WorkflowError]) =
-    val started = java.time.Instant.now()
     for
       depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
       depArgs     = depResults.toIndexedSeq.map(_.value)
       depIds      = depResults.map(r => taskIdOf(task.deps, depResults, r))
-      _          <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started))
+      started    <- Clock.now
+      _          <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
       ctx         = newTaskContext()
       value      <- runBody(task.id, task.body(ctx, depArgs))
       // Command outputs are not consumed by downstream deps (Commands are

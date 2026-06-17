@@ -80,4 +80,18 @@ object VPathRef:
     * fingerprint directly — enabling the early-cutoff property from spec §3.5.
     */
   given Hashable[VPathRef] = (r: VPathRef) => r.fingerprint
+
+  /** Order-sensitive aggregate fingerprint over a chunk of refs.
+    *
+    * Used by the engine's `Task.Sources` valueHash and by the matching
+    * `Hashable[Chunk[VPathRef]]` so a parameterized
+    * `Task.cached[A, Chunk[VPathRef]]` matches the engine-side dep
+    * fingerprint exactly. Reordering or duplicating refs changes the
+    * aggregate.
+    */
+  def aggregateFingerprint(refs: Chunk[VPathRef]): Fingerprint =
+    if refs.isEmpty then Fingerprint.ofBytes(Chunk.from("sources:empty".getBytes))
+    else Fingerprint.ofBytes(Chunk.from(refs.map(_.fingerprint.value).mkString("|").getBytes))
+
+  given Hashable[Chunk[VPathRef]] = (refs: Chunk[VPathRef]) => aggregateFingerprint(refs)
 end VPathRef
