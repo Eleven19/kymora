@@ -8,7 +8,7 @@ import coursier.maven.MavenRepository
 
 object KymoraVersions:
     /** Minimum required Kyo version. Later snapshot or stable releases are acceptable. */
-    val Kyo: String = "1.0.0-RC2+88-0059a365-SNAPSHOT"
+    val Kyo: String = "1.0.0-RC2+139-715dffd7-SNAPSHOT"
 
     /** Pinned mainargs version for CLI argument parsing. */
     val mainargs: String = "0.7.6"
