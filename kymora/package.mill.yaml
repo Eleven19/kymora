@@ -3,3 +3,4 @@ artifactName: kymora
 moduleDeps:
   - build.kymora.core.jvm
   - build.kymora.vfs.jvm
+  - build.kymora.workflow.jvm

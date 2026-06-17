@@ -1,0 +1,38 @@
+package build.kymora.workflow
+
+import mill.*, scalalib.*, scalajslib.*, scalanativelib.*
+
+trait WorkflowModule extends _root_.build.CommonScalaModule
+    with PlatformScalaModule
+    with _root_.build.PublishSupport {
+
+    override def artifactName = "kymora-workflow"
+
+    def mvnDeps = Seq(
+        mvn"com.lihaoyi::mainargs::${_root_.build.KymoraVersions.mainargs}",
+        mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}"
+    )
+}
+
+trait WorkflowTestModule extends _root_.build.CommonScalaTestModule {
+
+    override def sources = Task.Sources(
+        moduleDir / os.up / "test" / "src"
+    )
+}
+
+object jvm extends WorkflowModule {
+    override def moduleDeps = Seq(build.kymora.vfs.jvm)
+    object test extends ScalaTests with WorkflowTestModule with _root_.build.KyoTestModule
+}
+
+object js extends WorkflowModule with _root_.build.CommonScalaJSModule {
+    override def moduleDeps = Seq(build.kymora.vfs.js)
+    object test extends ScalaJSTests with WorkflowTestModule with _root_.build.KyoTestJSModule
+}
+
+object native extends WorkflowModule with _root_.build.CommonScalaNativeModule {
+    override def moduleDeps = Seq(build.kymora.vfs.native)
+    object test extends ScalaNativeTests with WorkflowTestModule with _root_.build.KyoTestNativeModule
+}
