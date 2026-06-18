@@ -1,5 +1,6 @@
 # Mill
 out/
+.mill-remote-cache/
 .bsp/
 .metals/
 .bloop/
