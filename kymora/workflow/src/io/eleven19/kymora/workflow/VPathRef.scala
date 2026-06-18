@@ -29,7 +29,7 @@ object VPathRef:
     * across different paths produce equal fingerprints, enabling the engine's
     * early-cutoff property for downstream tasks.
     */
-  def of(path: VPath, vfs: ReadonlyVfs)(using Frame): VPathRef < (Sync & Abort[VfsError]) =
+  def of(path: VPath, vfs: ReadonlyVfs.Backend)(using Frame): VPathRef < (Sync & Abort[VfsError]) =
     for span <- vfs.readBytes(path)
     yield VPathRef(path, Fingerprint.ofBytes(Chunk.from(span.toArray)), quick = false)
 
@@ -37,7 +37,7 @@ object VPathRef:
     * file bytes. Cheaper than [[of]] but only detects size/mtime changes — see
     * spec §3.5 and §4.5.
     */
-  def quick(path: VPath, vfs: ReadonlyVfs)(using Frame): VPathRef < (Sync & Abort[VfsError]) =
+  def quick(path: VPath, vfs: ReadonlyVfs.Backend)(using Frame): VPathRef < (Sync & Abort[VfsError]) =
     for stat <- vfs.stat(path)
     yield
       val token      = s"${stat.size.toBytes}|${stat.lastModified.toEpochMillis}"

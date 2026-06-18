@@ -9,7 +9,7 @@ import kyo.*
   *
   *   - `<root>/<id-segments>.json`        — per-task manifest
   *   - `<root>/<id-segments>.dest/`       — `Task.Persistent` working dir,
-  *     retained across runs and held under [[PersistentMutex]] for the
+  *     retained across runs and held under `PersistentMutex` for the
   *     scope of one body invocation.
   *   - `<root>/<id-segments>.dest.tmp/`   — `Task.Cached` staging dir,
   *     atomically renamed to `.dest/` on success and removed on Scope exit
@@ -23,7 +23,7 @@ import kyo.*
 object VfsDirStore:
 
   /** Constructs a `CacheStore` rooted at `root` inside `vfs`. */
-  def init(root: VPath, vfs: Vfs)(using Frame): CacheStore < (Async & Abort[StoreError]) =
+  def init(root: VPath, vfs: Vfs.Backend)(using Frame): CacheStore < (Async & Abort[StoreError]) =
     new Impl(root, vfs)
 
   /** Builds the absolute manifest path for `key` under `root`.
@@ -60,7 +60,7 @@ object VfsDirStore:
     *
     * This sibling-of-`.dest` location is where a `Task.Cached` body writes
     * its outputs. On success the engine atomically renames it to `.dest/`;
-    * on failure the surrounding [[Scope]] finalizer removes it.
+    * on failure the surrounding `Scope` finalizer removes it.
     */
   private def destTmpPath(root: VPath, key: CacheKey)(using Frame): VPath =
     val parts = key.value.split('/').toVector.filter(_.nonEmpty)
@@ -94,7 +94,7 @@ object VfsDirStore:
     end if
   end toCacheKey
 
-  private final class Impl(root: VPath, vfs: Vfs) extends CacheStore:
+  private final class Impl(root: VPath, vfs: Vfs.Backend) extends CacheStore:
 
     /** Per-key in-process mutex for [[openPersistentWorkspace]].
       *
@@ -103,7 +103,7 @@ object VfsDirStore:
       * their `.dest/` paths live under different roots and never touch the
       * same files.
       *
-      * Real impl lives in `src-jvm-native/` ([[PersistentMutex]] backed by
+      * Real impl lives in `src-jvm-native/` (`PersistentMutex` backed by
       * `Semaphore`); JS gets a no-op variant under `src-js/` since the
       * event-loop already serializes fibers. Real cross-process advisory
       * locking would need an OS file lock — out of scope for v1.
@@ -175,7 +175,7 @@ object VfsDirStore:
     /** Returns a fresh `<root>/<key>.dest.tmp/` staging path for a
       * `Task.Cached` body.
       *
-      * The returned path is registered with the current [[Scope]] so that
+      * The returned path is registered with the current `Scope` so that
       * an unsealed workspace (i.e. exception or failure before the engine
       * renames it to `.dest/`) is removed on scope exit. Sealing is the
       * engine's responsibility and is not implemented here.
@@ -189,7 +189,7 @@ object VfsDirStore:
       * `Task.Persistent` body.
       *
       * Acquires a process-wide advisory lock keyed by `key.value` and
-      * releases it on [[Scope]] exit. The directory itself is NOT
+      * releases it on `Scope` exit. The directory itself is NOT
       * removed — persistence is the entire point of this workspace.
       */
     def openPersistentWorkspace(key: CacheKey): VPath < (Async & Scope & Abort[StoreError]) =

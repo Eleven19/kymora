@@ -1,14 +1,42 @@
 package io.eleven19.kymora.workflow
 
+import io.eleven19.kymora.vfs.ReadonlyVfs
 import io.eleven19.kymora.vfs.VPath
+import io.eleven19.kymora.vfs.Vfs
 import kyo.*
 import scala.annotation.publicInBinary
 
+/** A typed node in a workflow dependency graph.
+  *
+  * Tasks are values: define them with the smart constructors on [[Task]], then
+  * execute them under [[Workflow]]. The result type `A` is preserved through
+  * dependency wiring, so a `Task[Int]` can be passed to another task that
+  * expects an `Int`.
+  *
+  * {{{
+  * val source = Task.source("source")(VPath.root / "input.txt")
+  * val compile = Task.cached("compile")(source) { ref =>
+  *     s"compiled ${ref.path.show}"
+  * }
+  *
+  * Workflow.handle(runtime)(compile())
+  * }}}
+  */
 sealed trait Task[+A] derives CanEqual:
   def id: TaskId
   def version: TaskVersion
+  def apply()(using Frame): A < (Async & Workflow & Abort[WorkflowError]) =
+    Workflow.run(this)
 
 object Task:
+  /** Effects available inside task bodies.
+    *
+    * Bodies may run asynchronous Kyo code, access the ambient [[Workflow]],
+    * read/write through VFS path syntax, and fail with either ordinary
+    * `Throwable`s or domain-level [[WorkflowError]] values.
+    */
+  type BodyEffects = Async & Workflow & Vfs & ReadonlyVfs & Abort[Throwable | WorkflowError]
+
   /** File/directory input. Re-evaluated each run (path content rehashed via VFS).
     * Contributes to dependents' cache keys via the embedded fingerprint.
     *
@@ -27,7 +55,7 @@ object Task:
   end Source
 
   /** Ordered multi-path input (Mill `Sources` analogue). Each path is read +
-    * hashed via the ambient `Env[Vfs]`; the resulting `Chunk[VPathRef]`
+    * hashed via the workflow runtime VFS; the resulting `Chunk[VPathRef]`
     * preserves input order. The dep-side aggregate fingerprint is
     * order-sensitive (reordering or duplicating paths invalidates downstream
     * caches).
@@ -57,7 +85,7 @@ object Task:
     */
   final class Input[A] @publicInBinary private[workflow] (
       val id: TaskId,
-      private[workflow] val read: () => A < (Async & Abort[Throwable]),
+      private[workflow] val read: () => A < (BodyEffects),
       private[workflow] val hashable: Hashable[A],
   ) extends Task[A]:
     val version: TaskVersion = TaskVersion.v1
@@ -76,7 +104,7 @@ object Task:
     new Source(TaskId.unsafe(scope.qualify(id).value), path, quick = true)
 
   /** Build a [[Sources]] task under the ambient [[TaskScope]]. Each path is
-    * read + content-hashed on every run via the ambient `Env[Vfs]`.
+    * read + content-hashed on every run via the workflow runtime VFS.
     */
   inline def sources(inline id: String)(paths: VPath*)(using scope: TaskScope): Sources =
     new Sources(TaskId.unsafe(scope.qualify(id).value), Chunk.from(paths), quick = false)
@@ -91,7 +119,7 @@ object Task:
     * thunk is re-evaluated on every run; its value is hashed via the
     * implicit [[Hashable]] and contributes to dependents' cache keys.
     */
-  inline def input[A](inline id: String)(read: => A < (Async & Abort[Throwable]))(using
+  inline def input[A](inline id: String)(read: => A < (BodyEffects))(using
       scope: TaskScope,
       h: Hashable[A],
   ): Input[A] =
@@ -111,7 +139,7 @@ object Task:
       val id: TaskId,
       val version: TaskVersion,
       private[workflow] val deps: Seq[Task[?]],
-      private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (Async & Abort[Throwable]),
+      private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (BodyEffects),
       private[workflow] val paramHash: Maybe[Fingerprint] = Maybe.empty,
   ) extends Task[A]
 
@@ -119,7 +147,7 @@ object Task:
 
   // Leaf (no deps)
   inline def cached[A](inline id: String, version: TaskVersion)(
-      value: => A,
+      value: => A < BodyEffects,
   )(using scope: TaskScope): Task[A] =
     new Cached[A](
       TaskId.unsafe(scope.qualify(id).value),
@@ -129,13 +157,13 @@ object Task:
     )
 
   // Leaf (default version)
-  inline def cached[A](inline id: String)(value: => A)(using scope: TaskScope): Task[A] =
+  inline def cached[A](inline id: String)(value: => A < BodyEffects)(using scope: TaskScope): Task[A] =
     cached[A](id, TaskVersion.v1)(value)
 
   // 1 dep
   inline def cached[A, D1](inline id: String, version: TaskVersion)(
       d1: Task[D1],
-  )(body: D1 => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: D1 => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Cached[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -146,14 +174,14 @@ object Task:
   // 1 dep (default version)
   inline def cached[A, D1](inline id: String)(
       d1: Task[D1],
-  )(body: D1 => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: D1 => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1](id, TaskVersion.v1)(d1)(body)
 
   // 2 deps
   inline def cached[A, D1, D2](inline id: String, version: TaskVersion)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Cached[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -165,7 +193,7 @@ object Task:
   inline def cached[A, D1, D2](inline id: String)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
 
   // 3 deps
@@ -173,7 +201,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (D1, D2, D3) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Cached[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -191,7 +219,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (D1, D2, D3) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(body)
 
   // 4 deps
@@ -200,7 +228,7 @@ object Task:
       d2: Task[D2],
       d3: Task[D3],
       d4: Task[D4],
-  )(body: (D1, D2, D3, D4) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Cached[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -220,7 +248,7 @@ object Task:
       d2: Task[D2],
       d3: Task[D3],
       d4: Task[D4],
-  )(body: (D1, D2, D3, D4) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3, D4](id, TaskVersion.v1)(d1, d2, d3, d4)(body)
 
   // 5 deps
@@ -230,7 +258,7 @@ object Task:
       d3: Task[D3],
       d4: Task[D4],
       d5: Task[D5],
-  )(body: (D1, D2, D3, D4, D5) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4, D5) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Cached[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -252,7 +280,7 @@ object Task:
       d3: Task[D3],
       d4: Task[D4],
       d5: Task[D5],
-  )(body: (D1, D2, D3, D4, D5) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4, D5) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3, D4, D5](id, TaskVersion.v1)(d1, d2, d3, d4, d5)(body)
 
   // 6 deps
@@ -263,7 +291,7 @@ object Task:
       d4: Task[D4],
       d5: Task[D5],
       d6: Task[D6],
-  )(body: (D1, D2, D3, D4, D5, D6) => A < (Async & Abort[Throwable]))(using
+  )(body: (D1, D2, D3, D4, D5, D6) => A < (BodyEffects))(using
       scope: TaskScope,
   ): Task[A] =
     new Cached[A](
@@ -289,7 +317,7 @@ object Task:
       d4: Task[D4],
       d5: Task[D5],
       d6: Task[D6],
-  )(body: (D1, D2, D3, D4, D5, D6) => A < (Async & Abort[Throwable]))(using
+  )(body: (D1, D2, D3, D4, D5, D6) => A < (BodyEffects))(using
       scope: TaskScope,
   ): Task[A] =
     cached[A, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(body)
@@ -303,38 +331,38 @@ object Task:
   /** Alias for [[cached]] — kept for Kyo-convention compatibility.
     * Prefer [[cached]] for new code. */
   inline def init[A](inline id: String, version: TaskVersion)(
-      value: => A,
+      value: => A < BodyEffects,
   )(using scope: TaskScope): Task[A] =
     cached[A](id, version)(value)
 
   /** Alias for [[cached]] (default version). */
-  inline def init[A](inline id: String)(value: => A)(using scope: TaskScope): Task[A] =
+  inline def init[A](inline id: String)(value: => A < BodyEffects)(using scope: TaskScope): Task[A] =
     cached[A](id)(value)
 
   /** Alias for [[cached]] (1 dep). */
   inline def init[A, D1](inline id: String, version: TaskVersion)(
       d1: Task[D1],
-  )(body: D1 => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: D1 => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1](id, version)(d1)(body)
 
   /** Alias for [[cached]] (1 dep, default version). */
   inline def init[A, D1](inline id: String)(
       d1: Task[D1],
-  )(body: D1 => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: D1 => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1](id)(d1)(body)
 
   /** Alias for [[cached]] (2 deps). */
   inline def init[A, D1, D2](inline id: String, version: TaskVersion)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2](id, version)(d1, d2)(body)
 
   /** Alias for [[cached]] (2 deps, default version). */
   inline def init[A, D1, D2](inline id: String)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2](id)(d1, d2)(body)
 
   /** Alias for [[cached]] (3 deps). */
@@ -342,7 +370,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (D1, D2, D3) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3](id, version)(d1, d2, d3)(body)
 
   /** Alias for [[cached]] (3 deps, default version). */
@@ -350,7 +378,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (D1, D2, D3) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3](id)(d1, d2, d3)(body)
 
   /** Alias for [[cached]] (4 deps). */
@@ -359,7 +387,7 @@ object Task:
       d2: Task[D2],
       d3: Task[D3],
       d4: Task[D4],
-  )(body: (D1, D2, D3, D4) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3, D4](id, version)(d1, d2, d3, d4)(body)
 
   /** Alias for [[cached]] (4 deps, default version). */
@@ -368,7 +396,7 @@ object Task:
       d2: Task[D2],
       d3: Task[D3],
       d4: Task[D4],
-  )(body: (D1, D2, D3, D4) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3, D4](id)(d1, d2, d3, d4)(body)
 
   /** Alias for [[cached]] (5 deps). */
@@ -378,7 +406,7 @@ object Task:
       d3: Task[D3],
       d4: Task[D4],
       d5: Task[D5],
-  )(body: (D1, D2, D3, D4, D5) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4, D5) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3, D4, D5](id, version)(d1, d2, d3, d4, d5)(body)
 
   /** Alias for [[cached]] (5 deps, default version). */
@@ -388,7 +416,7 @@ object Task:
       d3: Task[D3],
       d4: Task[D4],
       d5: Task[D5],
-  )(body: (D1, D2, D3, D4, D5) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4, D5) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     cached[A, D1, D2, D3, D4, D5](id)(d1, d2, d3, d4, d5)(body)
 
   /** Alias for [[cached]] (6 deps). */
@@ -399,7 +427,7 @@ object Task:
       d4: Task[D4],
       d5: Task[D5],
       d6: Task[D6],
-  )(body: (D1, D2, D3, D4, D5, D6) => A < (Async & Abort[Throwable]))(using
+  )(body: (D1, D2, D3, D4, D5, D6) => A < (BodyEffects))(using
       scope: TaskScope,
   ): Task[A] =
     cached[A, D1, D2, D3, D4, D5, D6](id, version)(d1, d2, d3, d4, d5, d6)(body)
@@ -412,7 +440,7 @@ object Task:
       d4: Task[D4],
       d5: Task[D5],
       d6: Task[D6],
-  )(body: (D1, D2, D3, D4, D5, D6) => A < (Async & Abort[Throwable]))(using
+  )(body: (D1, D2, D3, D4, D5, D6) => A < (BodyEffects))(using
       scope: TaskScope,
   ): Task[A] =
     cached[A, D1, D2, D3, D4, D5, D6](id)(d1, d2, d3, d4, d5, d6)(body)
@@ -430,7 +458,7 @@ object Task:
     * a Cached task whose `paramHash` is folded into its `inputsHash`.
     */
   inline def cached[A, P](inline id: String, version: TaskVersion)(
-      body: P => A < (Async & Abort[Throwable]),
+      body: P => A < (BodyEffects),
   )(using scope: TaskScope, hp: Hashable[P]): P => Task[A] =
     val taskId = TaskId.unsafe(scope.qualify(id).value)
     (p: P) =>
@@ -445,14 +473,14 @@ object Task:
 
   /** Parameterized [[Cached]] (leaf, default version). */
   inline def cached[A, P](inline id: String)(
-      body: P => A < (Async & Abort[Throwable]),
+      body: P => A < (BodyEffects),
   )(using scope: TaskScope, hp: Hashable[P]): P => Task[A] =
     cached[A, P](id, TaskVersion.v1)(body)
 
   /** Parameterized [[Cached]] with 1 dep. */
   inline def cached[A, P, D1](inline id: String, version: TaskVersion)(
       d1: Task[D1],
-  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -470,7 +498,7 @@ object Task:
   /** Parameterized [[Cached]] with 1 dep (default version). */
   inline def cached[A, P, D1](inline id: String)(
       d1: Task[D1],
-  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -480,7 +508,7 @@ object Task:
   inline def cached[A, P, D1, D2](inline id: String, version: TaskVersion)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -499,7 +527,7 @@ object Task:
   inline def cached[A, P, D1, D2](inline id: String)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -510,7 +538,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (P, D1, D2, D3) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2, D3) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -536,7 +564,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (P, D1, D2, D3) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2, D3) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -551,13 +579,13 @@ object Task:
       val id: TaskId,
       val version: TaskVersion,
       private[workflow] val deps: Seq[Task[?]],
-      private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (Async & Abort[Throwable]),
+      private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (BodyEffects),
       private[workflow] val paramHash: Maybe[Fingerprint] = Maybe.empty,
   ) extends Task[A]
 
   // Leaf (no deps)
   inline def persistent[A](inline id: String, version: TaskVersion)(
-      value: => A,
+      value: => A < BodyEffects,
   )(using scope: TaskScope): Task[A] =
     new Persistent[A](
       TaskId.unsafe(scope.qualify(id).value),
@@ -567,13 +595,13 @@ object Task:
     )
 
   // Leaf (default version)
-  inline def persistent[A](inline id: String)(value: => A)(using scope: TaskScope): Task[A] =
+  inline def persistent[A](inline id: String)(value: => A < BodyEffects)(using scope: TaskScope): Task[A] =
     persistent[A](id, TaskVersion.v1)(value)
 
   // 1 dep
   inline def persistent[A, D1](inline id: String, version: TaskVersion)(
       d1: Task[D1],
-  )(body: D1 => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: D1 => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Persistent[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -584,14 +612,14 @@ object Task:
   // 1 dep (default version)
   inline def persistent[A, D1](inline id: String)(
       d1: Task[D1],
-  )(body: D1 => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: D1 => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     persistent[A, D1](id, TaskVersion.v1)(d1)(body)
 
   // 2 deps
   inline def persistent[A, D1, D2](inline id: String, version: TaskVersion)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Persistent[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -603,7 +631,7 @@ object Task:
   inline def persistent[A, D1, D2](inline id: String)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     persistent[A, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
 
   // 3 deps
@@ -611,7 +639,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (D1, D2, D3) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Persistent[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -629,7 +657,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (D1, D2, D3) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     persistent[A, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(body)
 
   // 4 deps
@@ -638,7 +666,7 @@ object Task:
       d2: Task[D2],
       d3: Task[D3],
       d4: Task[D4],
-  )(body: (D1, D2, D3, D4) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Persistent[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -658,7 +686,7 @@ object Task:
       d2: Task[D2],
       d3: Task[D3],
       d4: Task[D4],
-  )(body: (D1, D2, D3, D4) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     persistent[A, D1, D2, D3, D4](id, TaskVersion.v1)(d1, d2, d3, d4)(body)
 
   // 5 deps
@@ -668,7 +696,7 @@ object Task:
       d3: Task[D3],
       d4: Task[D4],
       d5: Task[D5],
-  )(body: (D1, D2, D3, D4, D5) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4, D5) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     new Persistent[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -690,7 +718,7 @@ object Task:
       d3: Task[D3],
       d4: Task[D4],
       d5: Task[D5],
-  )(body: (D1, D2, D3, D4, D5) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Task[A] =
+  )(body: (D1, D2, D3, D4, D5) => A < (BodyEffects))(using scope: TaskScope): Task[A] =
     persistent[A, D1, D2, D3, D4, D5](id, TaskVersion.v1)(d1, d2, d3, d4, d5)(body)
 
   // 6 deps
@@ -701,7 +729,7 @@ object Task:
       d4: Task[D4],
       d5: Task[D5],
       d6: Task[D6],
-  )(body: (D1, D2, D3, D4, D5, D6) => A < (Async & Abort[Throwable]))(using
+  )(body: (D1, D2, D3, D4, D5, D6) => A < (BodyEffects))(using
       scope: TaskScope,
   ): Task[A] =
     new Persistent[A](
@@ -727,7 +755,7 @@ object Task:
       d4: Task[D4],
       d5: Task[D5],
       d6: Task[D6],
-  )(body: (D1, D2, D3, D4, D5, D6) => A < (Async & Abort[Throwable]))(using
+  )(body: (D1, D2, D3, D4, D5, D6) => A < (BodyEffects))(using
       scope: TaskScope,
   ): Task[A] =
     persistent[A, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(body)
@@ -736,7 +764,7 @@ object Task:
 
   /** Parameterized [[Persistent]] (leaf). */
   inline def persistent[A, P](inline id: String, version: TaskVersion)(
-      body: P => A < (Async & Abort[Throwable]),
+      body: P => A < (BodyEffects),
   )(using scope: TaskScope, hp: Hashable[P]): P => Task[A] =
     val taskId = TaskId.unsafe(scope.qualify(id).value)
     (p: P) =>
@@ -751,14 +779,14 @@ object Task:
 
   /** Parameterized [[Persistent]] (leaf, default version). */
   inline def persistent[A, P](inline id: String)(
-      body: P => A < (Async & Abort[Throwable]),
+      body: P => A < (BodyEffects),
   )(using scope: TaskScope, hp: Hashable[P]): P => Task[A] =
     persistent[A, P](id, TaskVersion.v1)(body)
 
   /** Parameterized [[Persistent]] with 1 dep. */
   inline def persistent[A, P, D1](inline id: String, version: TaskVersion)(
       d1: Task[D1],
-  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -776,7 +804,7 @@ object Task:
   /** Parameterized [[Persistent]] with 1 dep (default version). */
   inline def persistent[A, P, D1](inline id: String)(
       d1: Task[D1],
-  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -786,7 +814,7 @@ object Task:
   inline def persistent[A, P, D1, D2](inline id: String, version: TaskVersion)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -805,7 +833,7 @@ object Task:
   inline def persistent[A, P, D1, D2](inline id: String)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -816,7 +844,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (P, D1, D2, D3) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2, D3) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -842,7 +870,7 @@ object Task:
       d1: Task[D1],
       d2: Task[D2],
       d3: Task[D3],
-  )(body: (P, D1, D2, D3) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2, D3) => A < (BodyEffects))(using
       scope: TaskScope,
       hp: Hashable[P],
   ): P => Task[A] =
@@ -863,7 +891,7 @@ object Task:
       val id: TaskId,
       val version: TaskVersion,
       private[workflow] val deps: Seq[Task[?]],
-      private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (Async & Abort[Throwable]),
+      private[workflow] val body: (TaskContext, IndexedSeq[Any]) => A < (BodyEffects),
       private[workflow] val paramHash: Maybe[Fingerprint] = Maybe.empty,
   ) extends Task[A]
 
@@ -873,7 +901,7 @@ object Task:
     */
   // Leaf (no deps)
   inline def command[A](inline id: String, version: TaskVersion)(
-      value: => A,
+      value: => A < BodyEffects,
   )(using scope: TaskScope): Command[A] =
     new Command[A](
       TaskId.unsafe(scope.qualify(id).value),
@@ -883,13 +911,13 @@ object Task:
     )
 
   // Leaf (default version)
-  inline def command[A](inline id: String)(value: => A)(using scope: TaskScope): Command[A] =
+  inline def command[A](inline id: String)(value: => A < BodyEffects)(using scope: TaskScope): Command[A] =
     command[A](id, TaskVersion.v1)(value)
 
   // 1 dep
   inline def command[A, D1](inline id: String, version: TaskVersion)(
       d1: Task[D1],
-  )(body: D1 => A < (Async & Abort[Throwable]))(using scope: TaskScope): Command[A] =
+  )(body: D1 => A < (BodyEffects))(using scope: TaskScope): Command[A] =
     new Command[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -900,14 +928,14 @@ object Task:
   // 1 dep (default version)
   inline def command[A, D1](inline id: String)(
       d1: Task[D1],
-  )(body: D1 => A < (Async & Abort[Throwable]))(using scope: TaskScope): Command[A] =
+  )(body: D1 => A < (BodyEffects))(using scope: TaskScope): Command[A] =
     command[A, D1](id, TaskVersion.v1)(d1)(body)
 
   // 2 deps
   inline def command[A, D1, D2](inline id: String, version: TaskVersion)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Command[A] =
+  )(body: (D1, D2) => A < (BodyEffects))(using scope: TaskScope): Command[A] =
     new Command[A](
       TaskId.unsafe(scope.qualify(id).value),
       version,
@@ -919,7 +947,7 @@ object Task:
   inline def command[A, D1, D2](inline id: String)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (D1, D2) => A < (Async & Abort[Throwable]))(using scope: TaskScope): Command[A] =
+  )(body: (D1, D2) => A < (BodyEffects))(using scope: TaskScope): Command[A] =
     command[A, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
 
   // ─────────────── parameterized command (P does NOT need Hashable) ──────────
@@ -933,7 +961,7 @@ object Task:
     * Command whose body closes over the supplied `P`.
     */
   inline def command[A, P](inline id: String, version: TaskVersion)(
-      body: P => A < (Async & Abort[Throwable]),
+      body: P => A < (BodyEffects),
   )(using scope: TaskScope): P => Command[A] =
     val taskId = TaskId.unsafe(scope.qualify(id).value)
     (p: P) =>
@@ -946,14 +974,14 @@ object Task:
 
   /** Parameterized [[Command]] (leaf, default version). */
   inline def command[A, P](inline id: String)(
-      body: P => A < (Async & Abort[Throwable]),
+      body: P => A < (BodyEffects),
   )(using scope: TaskScope): P => Command[A] =
     command[A, P](id, TaskVersion.v1)(body)
 
   /** Parameterized [[Command]] with 1 dep. */
   inline def command[A, P, D1](inline id: String, version: TaskVersion)(
       d1: Task[D1],
-  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using scope: TaskScope): P => Command[A] =
+  )(body: (P, D1) => A < (BodyEffects))(using scope: TaskScope): P => Command[A] =
     val taskId = TaskId.unsafe(scope.qualify(id).value)
     (p: P) =>
       new Command[A](
@@ -966,14 +994,14 @@ object Task:
   /** Parameterized [[Command]] with 1 dep (default version). */
   inline def command[A, P, D1](inline id: String)(
       d1: Task[D1],
-  )(body: (P, D1) => A < (Async & Abort[Throwable]))(using scope: TaskScope): P => Command[A] =
+  )(body: (P, D1) => A < (BodyEffects))(using scope: TaskScope): P => Command[A] =
     command[A, P, D1](id, TaskVersion.v1)(d1)(body)
 
   /** Parameterized [[Command]] with 2 deps. */
   inline def command[A, P, D1, D2](inline id: String, version: TaskVersion)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2) => A < (BodyEffects))(using
       scope: TaskScope,
   ): P => Command[A] =
     val taskId = TaskId.unsafe(scope.qualify(id).value)
@@ -989,7 +1017,7 @@ object Task:
   inline def command[A, P, D1, D2](inline id: String)(
       d1: Task[D1],
       d2: Task[D2],
-  )(body: (P, D1, D2) => A < (Async & Abort[Throwable]))(using
+  )(body: (P, D1, D2) => A < (BodyEffects))(using
       scope: TaskScope,
   ): P => Command[A] =
     command[A, P, D1, D2](id, TaskVersion.v1)(d1, d2)(body)

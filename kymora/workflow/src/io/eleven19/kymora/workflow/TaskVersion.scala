@@ -2,6 +2,11 @@ package io.eleven19.kymora.workflow
 
 import kyo.*
 
+/** Semantic version for a task body.
+  *
+  * Bump the version when a task's implementation changes in a way that should
+  * invalidate previous cached results even if its dependencies did not change.
+  */
 final case class TaskVersion(major: Int, minor: Int, patch: Int) derives CanEqual:
   require(major >= 0 && minor >= 0 && patch >= 0, "TaskVersion components must be >= 0")
   def render: String         = s"$major.$minor.$patch"
@@ -11,12 +16,16 @@ final case class TaskVersion(major: Int, minor: Int, patch: Int) derives CanEqua
 end TaskVersion
 
 object TaskVersion:
+  /** Default initial task version. */
   val v1: TaskVersion                                       = TaskVersion(1, 0, 0)
+  /** Builds a version from numeric components. */
   def of(major: Int, minor: Int, patch: Int): TaskVersion   = TaskVersion(major, minor, patch)
 
+  /** Compile-time checked version literal such as `TaskVersion("1.2.3")`. */
   inline def apply(inline literal: String): TaskVersion =
     ${ io.eleven19.kymora.workflow.macros.TaskVersionMacros.literal('literal) }
 
+  /** Runtime parser for user-provided semantic versions. */
   def parse(s: String): Result[ParseError, TaskVersion] =
     s.split('.') match
       case Array(a, b, c) =>

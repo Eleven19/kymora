@@ -11,8 +11,8 @@ class ParallelismTests extends Test[Any]:
     val c = Task.init("c")(a, b) { (x, y) => x + y }
     for
       driver <- WorkflowTestDriver.init
-      services = driver.services.copy(config = driver.config.copy(parallelism = 2))
-      result  <- Workflow.Services.provide(services)(Workflow.run(c))
+      runtime = driver.runtime.copy(config = driver.config.copy(parallelism = 2))
+      result <- Workflow.handle(runtime)(Workflow.run(c))
     yield assert(result == 3)
   }
   "Independent leaves both execute under parallelism=1 (sequential fallback)" in {
@@ -25,8 +25,8 @@ class ParallelismTests extends Test[Any]:
     val c = Task.init("c")(a, b) { (x, y) => x + y }
     for
       driver <- WorkflowTestDriver.init
-      services = driver.services.copy(config = driver.config.copy(parallelism = 1))
-      result  <- Workflow.Services.provide(services)(Workflow.run(c))
+      runtime = driver.runtime.copy(config = driver.config.copy(parallelism = 1))
+      result <- Workflow.handle(runtime)(Workflow.run(c))
     yield assert(result == 30)
   }
   "Failed body aborts run by default (continueOnError=false)" in {

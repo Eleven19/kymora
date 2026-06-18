@@ -6,6 +6,14 @@ import kyo.*
   *
   * `VPath` is independent from the host operating system. It always uses `/` as its separator, tracks whether a path is
   * absolute, and normalizes empty segments, `.`, and `..` during construction.
+  *
+  * {{{
+  * val source = VPath.root / "src" / "Main.scala"
+  * val cache  = VPath("target") / "cache"
+  *
+  * source.show // "/src/Main.scala"
+  * cache.show  // "target/cache"
+  * }}}
   */
 opaque type VPath = VPath.Data
 
@@ -98,7 +106,7 @@ object VPath:
         /** The last segment of the path, when present. */
         def name: Maybe[String] = self.parts.lastMaybe
 
-        /** The parent path, or [[Absent]] for root and current directory. */
+        /** The parent path, or `Absent` for root and current directory. */
         def parent: Maybe[VPath] =
             if self.parts.isEmpty then Absent
             else Present(Data(self.isAbsolute, self.parts.init))

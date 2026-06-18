@@ -8,7 +8,7 @@ import kyo.*
 
 private[vfs] object HostVfs:
 
-    def init(root: Path)(using Frame): Vfs < Sync =
+    def init(root: Path)(using Frame): Vfs.Backend < Sync =
         Sync.defer(new HostVfs(root))
 
     /** Appends host path `segments` to `base`, preserving the OS path root.
@@ -29,7 +29,7 @@ private[vfs] object HostVfs:
             Path(s"$prefix$sep${segments.mkString("/")}")
 end HostVfs
 
-final private class HostVfs(root: Path)(using Frame) extends Vfs:
+final private class HostVfs(root: Path)(using Frame) extends Vfs.Backend:
 
     def exists(path: VPath): Boolean < Sync =
         confinedMetadata(path)(_.exists).map(_.getOrElse(false))

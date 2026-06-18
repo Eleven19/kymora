@@ -7,7 +7,7 @@ import kyo.*
 
 /** End-to-end test harness for kymora-workflow.
   *
-  * Composes the four services [[Workflow.run]] needs:
+  * Composes the runtime [[Workflow.run]] needs:
   *   - a fresh in-memory [[Vfs]] (also exposed as [[vfs]])
   *   - a [[VfsDirStore]] over that VFS (also exposed as [[store]])
   *   - a fresh [[CollectingObserver]] (also exposed as [[observer]])
@@ -23,30 +23,26 @@ import kyo.*
   *   yield (value, events)
   * }}}
   *
-  * `driver.run` chains the four `Env.run` layers internally via
-  * [[Workflow.Services.provide]] so the test body doesn't have to.
+  * `driver.run` calls [[Workflow.handle]] so the test body doesn't have to.
   */
 final class WorkflowTestDriver private (
     val config: Workflow.Config,
-    val vfs: Vfs,
+    val vfs: Vfs.Backend,
     val store: CacheStore,
     val observer: CollectingObserver,
 ):
 
-  /** The four wired services as a single [[Workflow.Services.Bundle]].
-    * Pass to [[Workflow.Services.provide]] to layer them onto any effect
-    * requiring `Workflow.Services`. */
-  def services: Workflow.Services.Bundle =
-    Workflow.Services.init(config, vfs, store, observer)
+  def runtime: Workflow.Runtime =
+    Workflow.Runtime(config, vfs, VPath("cache"), observer)
 
   /** All [[WorkflowEvent]]s captured so far, in emission order. */
   def events: Chunk[WorkflowEvent] < Async = observer.events
 
-  /** Execute a goal under this driver's services via [[Workflow.run]]. */
+  /** Execute a goal under this driver's runtime via [[Workflow.run]]. */
   def run[A](goal: Task[A])(using
       Frame,
   ): A < (Async & Abort[WorkflowError]) =
-    Workflow.Services.provide(services)(Workflow.run(goal))
+    Workflow.handle(runtime)(Workflow.run(goal))
 
 end WorkflowTestDriver
 

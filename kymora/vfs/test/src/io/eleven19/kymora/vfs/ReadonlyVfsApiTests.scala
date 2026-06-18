@@ -30,7 +30,31 @@ class ReadonlyVfsApiTests extends Test[Any]:
         }.map(_ => assert(fs.writes == List("/out.txt" -> "saved")))
     }
 
-    private final case class TestReadonlyVfs(files: Map[String, String]) extends ReadonlyVfs:
+    "PR example: Vfs.run handles a mixed read/write path-first program" in {
+        val program =
+            for
+                _    <- (VPath.root / "notes.txt").write("hello")
+                text <- (VPath.root / "notes.txt").read
+            yield text
+
+        for
+            backend <- Vfs.inMemory.init
+            text    <- Vfs.run(backend)(program)
+        yield assert(text == "hello")
+    }
+
+    "PR example: ReadonlyVfs.run handles a read-only path-first program" in {
+        val readOnly =
+            (VPath.root / "config.json").read
+
+        for
+            backend <- Vfs.inMemory.init
+            _       <- backend.write(VPath.root / "config.json", """{"name":"kymora"}""")
+            text    <- ReadonlyVfs.run(backend.asReadonly)(readOnly)
+        yield assert(text == """{"name":"kymora"}""")
+    }
+
+    private final case class TestReadonlyVfs(files: Map[String, String]) extends ReadonlyVfs.Backend:
         def exists(path: VPath): Boolean < Sync =
             Sync.defer(files.contains(path.show))
 
@@ -98,12 +122,12 @@ class ReadonlyVfsApiTests extends Test[Any]:
             Stream.empty
     end TestReadonlyVfs
 
-    private final class TestWritableVfs extends Vfs:
+    private final class TestWritableVfs extends Vfs.Backend:
         private var recordedWrites: List[(String, String)] = Nil
 
         def writes: List[(String, String)] = recordedWrites.reverse
 
-        override def asReadonly: ReadonlyVfs =
+        override def asReadonly: ReadonlyVfs.Backend =
             ReadonlyVfs.from(this)
 
         def exists(path: VPath): Boolean < Sync =

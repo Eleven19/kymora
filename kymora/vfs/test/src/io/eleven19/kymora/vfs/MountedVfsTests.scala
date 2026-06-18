@@ -305,7 +305,7 @@ class MountedVfsTests extends Test[Any]:
                 appBackend <- Vfs.inMemory.init
                 cacheBackend <- Vfs.inMemory.init
                 _          <- appBackend.write(VPath.root / "config.txt", "app")
-                mounted: ReadonlyVfs <- ReadonlyVfs.mounted.init(
+                mounted: ReadonlyVfs.Backend <- ReadonlyVfs.mounted.init(
                     ReadonlyMount(VPath.root / "app", appBackend.asReadonly),
                     ReadonlyMount(VPath.root / "var" / "cache", cacheBackend.asReadonly)
                 )

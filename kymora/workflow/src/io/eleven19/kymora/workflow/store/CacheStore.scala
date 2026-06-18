@@ -21,11 +21,11 @@ final case class StoredManifest(bytes: Chunk[Byte], path: VPath)
 /** Pluggable cache store. Default impl is `VfsDirStore` in Task 29.
   *
   *   - `openWorkspace` returns a fresh `.dest.tmp/` workspace path for a
-  *     `Task.Cached` body; the [[Scope]] finalizer cleans it up on failure,
+  *     `Task.Cached` body; the `Scope` finalizer cleans it up on failure,
   *     and the engine atomically renames it to `.dest/` on success.
   *   - `openPersistentWorkspace` returns the in-place `.dest/` for a
   *     `Task.Persistent` body, taking a per-key advisory lock for the
-  *     [[Scope]].
+  *     `Scope`.
   */
 trait CacheStore:
   def read(key: CacheKey): Maybe[StoredManifest] < (Async & Abort[StoreError])
