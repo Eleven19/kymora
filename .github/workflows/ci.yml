@@ -33,7 +33,7 @@ jobs:
         uses: ./.github/actions/setup-mill-caches
 
       - name: Check formatting
-        run: ./mill kymora.core.jvm.checkFormat + kymora.vfs.jvm.checkFormat
+        run: ./mill kymora.vfs.jvm.checkFormat
 
   build:
     name: Build & Test (JVM / ${{ matrix.os }})
@@ -60,10 +60,10 @@ jobs:
         uses: ./.github/actions/setup-mill-caches
 
       - name: Compile JVM modules
-        run: ${{ matrix.mill }} kymora.core.jvm.compile + kymora.vfs.jvm.compile
+        run: ${{ matrix.mill }} kymora.vfs.jvm.compile + kymora.workflow.jvm.compile + kymora.workflow-testkit.jvm.compile + kymora.examples.jvm.compile
 
       - name: Run JVM tests
-        run: ${{ matrix.mill }} kymora.core.jvm.test + kymora.vfs.jvm.test
+        run: ${{ matrix.mill }} kymora.vfs.jvm.test + kymora.workflow.jvm.test + kymora.workflow-testkit.jvm.test + kymora.examples.jvm.test
 
   build-js:
     name: Build & Test (Scala.js)
@@ -85,10 +85,10 @@ jobs:
         uses: ./.github/actions/setup-mill-caches
 
       - name: Compile JS modules
-        run: ./mill kymora.core.js.compile + kymora.vfs.js.compile
+        run: ./mill kymora.vfs.js.compile + kymora.workflow.js.compile + kymora.workflow-testkit.js.compile
 
       - name: Run JS tests
-        run: ./mill kymora.core.js.test + kymora.vfs.js.test
+        run: ./mill kymora.vfs.js.test + kymora.workflow.js.test + kymora.workflow-testkit.js.test
 
   build-native:
     name: Build & Test (Scala Native)
@@ -111,7 +111,7 @@ jobs:
         uses: ./.github/actions/setup-mill-caches
 
       - name: Compile Native modules
-        run: ./mill kymora.core.native.compile + kymora.vfs.native.compile
+        run: ./mill kymora.vfs.native.compile + kymora.workflow.native.compile + kymora.workflow-testkit.native.compile
 
       - name: Run Native tests
-        run: ./mill kymora.core.native.test + kymora.vfs.native.test
+        run: ./mill kymora.vfs.native.test + kymora.workflow.native.test + kymora.workflow-testkit.native.test
