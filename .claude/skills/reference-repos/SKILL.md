@@ -22,7 +22,7 @@ The skill is self-contained under `.claude/skills/reference-repos/` in this proj
 | File | Purpose |
 |------|---------|
 | `ref-repos` / `ref-repos.bat` | Launcher — resolves the target project, then runs Mill |
-| `mill` / `mill.bat` | Bundled Mill wrapper (1.1.6, Temurin 25) |
+| `mill` / `mill.bat` | Bundled Mill wrapper (1.2.0-RC1, Temurin 25) |
 | `build.mill.yaml` | Mill meta-build for the script |
 | `scripts/ref-repos.scala` | Scala 3 Mill script (`mainargs` CLI, VirtusLab `scala-yaml` manifest I/O) |
 

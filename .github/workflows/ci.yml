@@ -46,8 +46,10 @@ jobs:
           # bundled `mill.bat` is the Windows entry point.
           - os: ubuntu-latest
             mill: "./mill"
+            cache-platform: jvm
           - os: windows-latest
             mill: "./mill.bat"
+            cache-platform: jvm
     steps:
       - uses: actions/checkout@v4
 
@@ -59,11 +61,19 @@ jobs:
       - name: Setup Mill caches
         uses: ./.github/actions/setup-mill-caches
 
+      - name: Setup Mill remote cache
+        uses: actions/cache@v4
+        with:
+          path: .mill-remote-cache
+          key: ${{ runner.os }}-mill-remote-${{ matrix.cache-platform }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-mill-remote-${{ matrix.cache-platform }}-
+
       - name: Compile JVM modules
-        run: ${{ matrix.mill }} kymora.vfs.jvm.compile + kymora.workflow.jvm.compile + kymora.workflow-testkit.jvm.compile + kymora.examples.jvm.compile
+        run: ${{ matrix.mill }} --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-${{ matrix.cache-platform }} kymora.vfs.jvm.compile + kymora.workflow.jvm.compile + kymora.workflow-testkit.jvm.compile + kymora.examples.jvm.compile
 
       - name: Run JVM tests
-        run: ${{ matrix.mill }} kymora.vfs.jvm.test + kymora.workflow.jvm.test + kymora.workflow-testkit.jvm.test + kymora.examples.jvm.test
+        run: ${{ matrix.mill }} --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-${{ matrix.cache-platform }} kymora.vfs.jvm.test + kymora.workflow.jvm.test + kymora.workflow-testkit.jvm.test + kymora.examples.jvm.test
 
   build-js:
     name: Build & Test (Scala.js)
@@ -84,11 +94,19 @@ jobs:
       - name: Setup Mill caches
         uses: ./.github/actions/setup-mill-caches
 
+      - name: Setup Mill remote cache
+        uses: actions/cache@v4
+        with:
+          path: .mill-remote-cache
+          key: ${{ runner.os }}-mill-remote-js-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-mill-remote-js-
+
       - name: Compile JS modules
-        run: ./mill kymora.vfs.js.compile + kymora.workflow.js.compile + kymora.workflow-testkit.js.compile
+        run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-js kymora.vfs.js.compile + kymora.workflow.js.compile + kymora.workflow-testkit.js.compile
 
       - name: Run JS tests
-        run: ./mill kymora.vfs.js.test + kymora.workflow.js.test + kymora.workflow-testkit.js.test
+        run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-js kymora.vfs.js.test + kymora.workflow.js.test + kymora.workflow-testkit.js.test
 
   build-native:
     name: Build & Test (Scala Native)
@@ -110,8 +128,16 @@ jobs:
       - name: Setup Mill caches
         uses: ./.github/actions/setup-mill-caches
 
+      - name: Setup Mill remote cache
+        uses: actions/cache@v4
+        with:
+          path: .mill-remote-cache
+          key: ${{ runner.os }}-mill-remote-native-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-mill-remote-native-
+
       - name: Compile Native modules
-        run: ./mill kymora.vfs.native.compile + kymora.workflow.native.compile + kymora.workflow-testkit.native.compile
+        run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-native kymora.vfs.native.compile + kymora.workflow.native.compile + kymora.workflow-testkit.native.compile
 
       - name: Run Native tests
-        run: ./mill kymora.vfs.native.test + kymora.workflow.native.test + kymora.workflow-testkit.native.test
+        run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-native kymora.vfs.native.test + kymora.workflow.native.test + kymora.workflow-testkit.native.test

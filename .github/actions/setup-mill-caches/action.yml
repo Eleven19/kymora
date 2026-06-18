@@ -1,5 +1,5 @@
 name: Setup Mill caches
-description: Restore/save Coursier and Mill output caches for Mill builds
+description: Restore/save dependency caches for Mill builds
 
 runs:
   using: composite
@@ -12,12 +12,3 @@ runs:
         restore-keys: |
           ${{ runner.os }}-coursier-${{ github.workflow }}-${{ github.job }}-
           ${{ runner.os }}-coursier-
-
-    - name: Cache Mill out
-      uses: actions/cache@v4
-      with:
-        path: out
-        key: ${{ runner.os }}-mill-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('build.mill.yaml', 'kymora/**/package.mill', 'kymora/**/package.mill.yaml', 'mill-build/**', 'VERSION') }}
-        restore-keys: |
-          ${{ runner.os }}-mill-${{ github.workflow }}-${{ github.job }}-
-          ${{ runner.os }}-mill-

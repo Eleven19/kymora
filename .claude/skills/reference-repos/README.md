@@ -47,7 +47,7 @@ needed. Run it once per project before the first clone.
 ```
 your-project/          skill folder (.claude/skills/reference-repos/)
 ├── .ref/              ├── ref-repos          # shell launcher
-│   ├── manifest.yaml  ├── mill / mill.bat    # Mill 1.1.6 (Temurin 25)
+│   ├── manifest.yaml  ├── mill / mill.bat    # Mill 1.2.0-RC1 (Temurin 25)
 │   └── getkyo/kyo/    ├── build.mill.yaml
 └── .gitignore         └── scripts/ref-repos.scala
 ```

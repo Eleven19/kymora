@@ -21,7 +21,7 @@ This file is the shared source of truth for agents working in this repo.
 
 ## Build (Mill)
 
-Use the bundled `./mill` wrapper (Mill 1.1.6, JDK Temurin 25 — auto-provisioned).
+Use the bundled `./mill` wrapper (Mill 1.2.0-RC1, JDK Temurin 25 — auto-provisioned).
 When using Nushell, run Mill through the Nushell launcher: `nu mill.nu <task>`.
 
 ```sh

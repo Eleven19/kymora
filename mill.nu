@@ -7,7 +7,7 @@
 # artifact for the current platform, cache it locally, and exec it with the
 # compatibility `mill.main.cli` property.
 
-const default_mill_version = "1.1.6"
+const default_mill_version = "1.2.0-RC1"
 const mill_repo_url = "https://github.com/com-lihaoyi/mill"
 const native_suffix = "-native"
 const jvm_suffix = "-jvm"
