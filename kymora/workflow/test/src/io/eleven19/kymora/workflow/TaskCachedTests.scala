@@ -23,7 +23,7 @@ class TaskCachedTests extends Test[Any]:
     val t      = Task.init("foo")(dep) { x => x + 1 }
     val cached = t.asInstanceOf[Task.Cached[Int]]
     assert(cached.deps.size == 1)
-    assert(cached.deps.head eq dep)
+    assert(cached.deps.head.asTask.asInstanceOf[AnyRef] eq dep)
   }
   "Task.init (6 deps) records all deps in order" in {
     val ds = (1 to 6).map(i => Task.init(s"d$i")(i)).toVector
@@ -32,7 +32,7 @@ class TaskCachedTests extends Test[Any]:
     }
     val cached = t.asInstanceOf[Task.Cached[Int]]
     assert(cached.deps.size == 6)
-    (0 until 6).foreach(i => assert(cached.deps(i).eq(ds(i))))
+    (0 until 6).foreach(i => assert(cached.deps(i).asTask.asInstanceOf[AnyRef] eq ds(i)))
   }
   "Task.cached is the canonical name; Task.init is an alias" in {
     val a = Task.cached("ca")(42)

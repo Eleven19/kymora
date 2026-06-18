@@ -34,11 +34,7 @@ class CommandEngineTests extends Test[Any]:
       _      <- driver.run(goal)
       _      <- driver.run(goal)
     yield
-      assert(cmdCount.get() == 2)   // command body always runs
-      // dep should re-run because the in-process memo doesn't persist across runs
-      // and the scheduler's "cache HIT" path re-executes the body in Task 44's
-      // simplified design. So depCount likely == 2 in the current world.
-      // Test on cmdCount only; dep count is informational.
-      assert(depCount.get() >= 1)
+      assert(cmdCount.get() == 2)
+      assert(depCount.get() == 1)
   }
 end CommandEngineTests

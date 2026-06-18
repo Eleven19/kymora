@@ -7,6 +7,7 @@ import kyo.test.*
 class TaskRecordTests extends Test[Any]:
   "TaskRecord round-trips through Json for Int value" in {
     val r = TaskRecord[Int](
+      schemaVersion = TaskRecord.CurrentSchemaVersion,
       value = 42,
       valueHash = Fingerprint.unsafe("blake3:abc"),
       inputsHash = Fingerprint.unsafe("blake3:def"),

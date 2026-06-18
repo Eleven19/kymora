@@ -10,6 +10,7 @@ trait VfsModule extends _root_.build.CommonScalaModule
 
     def mvnDeps = Seq(
         mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
         mvn"com.outr::scribe::${_root_.build.KymoraVersions.Scribe}"
     )
 }
