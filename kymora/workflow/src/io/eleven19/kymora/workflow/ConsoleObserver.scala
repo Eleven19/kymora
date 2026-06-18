@@ -2,7 +2,11 @@ package io.eleven19.kymora.workflow
 
 import kyo.*
 
-/** Pretty-prints events to stdout. */
+/** Pretty-prints workflow events to `Console`.
+  *
+  * Uses Kyo's `Console` effect rather than direct `System.out`, so test suites
+  * can capture output and non-JVM platforms can provide their own console.
+  */
 object ConsoleObserver extends Observer:
   /** Format a single event as a one-line stdout-ready string. */
   def format(event: WorkflowEvent): String = event match

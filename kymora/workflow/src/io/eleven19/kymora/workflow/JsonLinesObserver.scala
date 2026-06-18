@@ -2,7 +2,11 @@ package io.eleven19.kymora.workflow
 
 import kyo.*
 
-/** Emits one JSON object per line. Sink defaults to stdout. */
+/** Emits one workflow event as one JSON object per console line.
+  *
+  * This observer is useful for build logs and tools that want to consume the
+  * workflow event stream without depending on Scala binary formats.
+  */
 object JsonLinesObserver extends Observer:
   /** Hand-rolled JSON encoder. Avoids kyo-schema's opaque-type derivation
     * limitation (TaskId, Fingerprint are opaque String aliases).

@@ -1,12 +1,16 @@
 # kymora
 
-Kymora provides extensions to the [Kyo](https://github.com/getkyo/kyo) framework along with additional modules and utilities to support building applications with Kyo.
+Kymora provides cross-platform extensions for the
+[Kyo](https://github.com/getkyo/kyo) effect system. The current modules focus
+on virtual filesystem access and workflow/task execution: programs describe the
+effects they need, and callers choose concrete runtimes such as in-memory,
+host-backed, or mounted filesystems.
 
 ## Modules
 
 - [`kymora-core`](kymora/core) — shared primitives for the rest of the suite.
-- [`kymora-vfs`](kymora/vfs) — virtual filesystem abstraction over local / in-memory
-  backends.
+- [`kymora-vfs`](kymora/vfs) — Kyo effects for read-only and writable virtual
+  filesystem access over host, in-memory, and mounted backends.
 - [`kymora-workflow`](kymora/workflow) — Kyo-native DAG task-graph engine with
   Mill-aligned incremental caching. See the
   [design spec](docs/superpowers/specs/2026-06-16-kymora-workflow-design.md).
@@ -16,6 +20,51 @@ Kymora provides extensions to the [Kyo](https://github.com/getkyo/kyo) framework
 - `kymora-examples` (JVM-only, unpublished) — runnable reference examples:
   `smile-build` (Mill-style build DSL) and `agent-skills` (workflow-backed agent
   skill runner).
+
+## Quick examples
+
+Use VFS path syntax with the smallest effect that fits the program:
+
+```scala
+import io.eleven19.kymora.vfs.*
+import kyo.*
+
+val program =
+  for
+    _    <- (VPath.root / "notes.txt").write("hello")
+    text <- (VPath.root / "notes.txt").read
+  yield text
+
+val result =
+  for
+    backend <- Vfs.inMemory.init
+    text    <- Vfs.run(backend)(program)
+  yield text
+```
+
+Run workflows by constructing a `Workflow.Runtime` and handling the `Workflow`
+effect:
+
+```scala
+import io.eleven19.kymora.vfs.*
+import io.eleven19.kymora.workflow.*
+import kyo.*
+
+val compile = Task.cached("compile") {
+  for
+    dest <- Workflow.dest
+    out   = dest / "classes.txt"
+    _    <- out.write("compiled")
+  yield out
+}
+
+val run =
+  for
+    vfs <- Vfs.inMemory.init
+    runtime = Workflow.Runtime(vfs)
+    output <- Workflow.handle(runtime)(compile())
+  yield output
+```
 
 ## Developing
 

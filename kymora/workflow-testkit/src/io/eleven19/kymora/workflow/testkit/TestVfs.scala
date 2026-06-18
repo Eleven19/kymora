@@ -3,15 +3,15 @@ package io.eleven19.kymora.workflow.testkit
 import io.eleven19.kymora.vfs.*
 import kyo.*
 
-/** Container returned by [[TestVfs.tempDir]]: a writable [[Vfs]] and the
+/** Container returned by [[TestVfs.tempDir]]: a writable [[Vfs.Backend]] and the
   * absolute [[VPath]] that names its root inside that VFS. */
-final case class TestVfsHandle(vfs: Vfs, root: VPath)
+final case class TestVfsHandle(vfs: Vfs.Backend, root: VPath)
 
 object TestVfs:
 
   /** A [[Scope]]-bound fresh working area for tests.
     *
-    * The handle's [[Vfs]] is a host-backed VFS rooted at a freshly created OS
+    * The handle's [[Vfs.Backend]] is a host-backed VFS rooted at a freshly created OS
     * temp directory (via Kyo's cross-platform `Path.tempDir`). The temp
     * directory — and therefore everything written through the VFS — is
     * automatically removed when the surrounding [[Scope]] exits.

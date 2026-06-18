@@ -1,5 +1,6 @@
 package io.eleven19.kymora.workflow
 
+import io.eleven19.kymora.workflow.testkit.*
 import kyo.*
 import kyo.test.*
 
@@ -15,8 +16,9 @@ class InputTests extends Test[Any]:
       count
     }
     for
-      r1 <- i.read()
-      r2 <- i.read()
+      driver <- WorkflowTestDriver.init
+      r1     <- driver.run(i)
+      r2     <- driver.run(i)
     yield
       assert(r1 == 1)
       assert(r2 == 2)

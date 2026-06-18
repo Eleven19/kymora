@@ -11,7 +11,7 @@ class CacheControlsTests extends Test[Any]:
       driver <- WorkflowTestDriver.init
       _      <- driver.store.write(CacheKey("a"), Chunk.from("x".getBytes), Maybe.empty)
       _      <- driver.store.write(CacheKey("b"), Chunk.from("y".getBytes), Maybe.empty)
-      _      <- Env.run(driver.store)(Workflow.purge())
+      _      <- Workflow.handle(driver.runtime)(Workflow.purge())
       a      <- driver.store.read(CacheKey("a"))
       b      <- driver.store.read(CacheKey("b"))
     yield
@@ -24,7 +24,7 @@ class CacheControlsTests extends Test[Any]:
       _      <- driver.store.write(CacheKey("kymora/vfs/jvm/compile"), Chunk.from("x".getBytes), Maybe.empty)
       _      <- driver.store.write(CacheKey("kymora/core/jvm/compile"), Chunk.from("y".getBytes), Maybe.empty)
       _      <- driver.store.write(CacheKey("other/thing"), Chunk.from("z".getBytes), Maybe.empty)
-      _      <- Env.run(driver.store)(Workflow.clean("kymora/"))
+      _      <- Workflow.handle(driver.runtime)(Workflow.clean("kymora/"))
       a      <- driver.store.read(CacheKey("kymora/vfs/jvm/compile"))
       b      <- driver.store.read(CacheKey("kymora/core/jvm/compile"))
       c      <- driver.store.read(CacheKey("other/thing"))
@@ -33,11 +33,11 @@ class CacheControlsTests extends Test[Any]:
       assert(b.isEmpty)
       assert(c.isDefined)
   }
-  "Config.verifyDest is observable via Env" in {
+  "Config.verifyDest is observable via Runtime" in {
     for
       driver <- WorkflowTestDriver.init
       cfg     = driver.config.copy(verifyDest = true)
-      v      <- Env.run(cfg)(Env.use[Workflow.Config](_.verifyDest))
-    yield assert(v)
+      runtime = driver.runtime.copy(config = cfg)
+    yield assert(runtime.config.verifyDest)
   }
 end CacheControlsTests

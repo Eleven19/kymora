@@ -8,19 +8,19 @@ import kyo.*
 
 private[vfs] object MountedVfs:
 
-    def init(mounts: Seq[Mount])(using Frame): Vfs < Abort[VfsError] =
+    def init(mounts: Seq[Mount])(using Frame): Vfs.Backend < Abort[VfsError] =
         validate(mounts.map(mount => Entry(mount.at, mount.root, mount.vfs, Present(mount.vfs))))
             .map(entries => MountedWritableVfs(entries))
 
-    def initReadonly(mounts: Seq[ReadonlyMount])(using Frame): ReadonlyVfs < Abort[VfsError] =
+    def initReadonly(mounts: Seq[ReadonlyMount])(using Frame): ReadonlyVfs.Backend < Abort[VfsError] =
         validate(mounts.map(mount => Entry(mount.at, mount.root, mount.vfs, Absent)))
             .map(entries => MountedReadonlyVfs(entries))
 
     final private case class Entry(
         at: VPath,
         root: VPath,
-        vfs: ReadonlyVfs,
-        writable: Maybe[Vfs]
+        vfs: ReadonlyVfs.Backend,
+        writable: Maybe[Vfs.Backend]
     )
 
     final private case class Route(
@@ -154,7 +154,7 @@ private[vfs] object MountedVfs:
             .mkString("^", ".*", "$")
         value.matches(regex)
 
-    private class MountedReadonlyVfs(entries: Chunk[Entry])(using Frame) extends ReadonlyVfs:
+    private class MountedReadonlyVfs(entries: Chunk[Entry])(using Frame) extends ReadonlyVfs.Backend:
 
         protected def route(path: VPath): Maybe[Route] =
             entries.toSeq.find(entry => isPrefix(entry.at, path)) match
@@ -422,9 +422,11 @@ private[vfs] object MountedVfs:
                     yield ()
     end MountedReadonlyVfs
 
-    final private class MountedWritableVfs(entries: Chunk[Entry])(using Frame) extends MountedReadonlyVfs(entries), Vfs:
+    final private class MountedWritableVfs(entries: Chunk[Entry])(using Frame)
+        extends MountedReadonlyVfs(entries),
+          Vfs.Backend:
 
-        private def writableRoute(path: VPath): (Route, Vfs) < Abort[VfsError] =
+        private def writableRoute(path: VPath): (Route, Vfs.Backend) < Abort[VfsError] =
             routeOrNotFound(path).flatMap { found =>
                 found.entry.writable match
                     case Present(vfs) => Abort.get(Result.succeed(found -> vfs))
@@ -434,7 +436,7 @@ private[vfs] object MountedVfs:
         private def writeOp[A](
             path: VPath,
             operation: String
-        )(effect: (Route, Vfs) => A < (Sync & Abort[VfsError])): A < (Sync & Abort[VfsError]) =
+        )(effect: (Route, Vfs.Backend) => A < (Sync & Abort[VfsError])): A < (Sync & Abort[VfsError]) =
             if isSyntheticDirectory(path) then Abort.fail(VfsError.IsDirectory(path))
             else
                 writableRoute(path).flatMap { case (found, vfs) =>

@@ -5,40 +5,29 @@ import io.eleven19.kymora.workflow.store.*
 import io.eleven19.kymora.vfs.Vfs
 import kyo.*
 
-/** Minimum-viable scheduler for plan Tasks 44-47.
+/** Worklist scheduler with a dedicated planning phase.
   *
   * Responsibilities:
-  *   - Walk a single goal, recursively executing dependencies first.
-  *   - Maintain an in-process memo so each `TaskId` is run at most once per
-  *     `Workflow.run` invocation (handles diamond DAGs).
-  *   - Consult the [[CacheStore]] (via `Env[CacheStore]`) for a per-task
-  *     sentinel manifest:
+  *   - **Planning phase** — walk all goals once via [[Graph.collect]], build an
+  *     [[ExecutionPlan]] (reachable tasks, dependency edges, stable execution
+  *     order, goal order), then execute from a shared memo.
+  *   - **Worklist execution** — schedule every task whose dependencies are
+  *     satisfied; when a task finishes, newly-ready dependents are scheduled.
+  *     A global [[Meter]] semaphore caps in-flight task bodies and cache I/O
+  *     at `max(1, cfg.parallelism)` (Source/Input reads count toward the cap).
+  *   - Maintain an in-process memo so each `TaskId` runs at most once per
+  *     `executeAll` invocation (handles diamond DAGs).
+  *   - Consult the runtime VFS cache layout for sentinel manifests:
   *       - HIT  -> emit [[WorkflowEvent.TaskCached]] and re-execute the body
-  *                 to recover the value (no value serialization yet — see
-  *                 the simplification notes in the task brief).
+  *                 to recover the value (no value serialization yet).
   *       - MISS -> emit [[WorkflowEvent.TaskStarted]], run the body, emit
-  *                 [[WorkflowEvent.TaskCompleted]], and write a sentinel
-  *                 manifest so the next run is a cache HIT.
-  *   - Always emit [[WorkflowEvent.TaskQueued]] (via `Env[Observer]`) when
-  *     a node is first visited.
-  *   - Honor `cfg.parallelism` at the per-node level: a node's dep list is
-  *     resolved via `Async.foreach(..., cfg.parallelism)` when parallelism
-  *     > 1 (real fan-out across the whole DAG is a follow-up — see
-  *     [[resolveDeps]]).
+  *                 [[WorkflowEvent.TaskCompleted]], and write a sentinel manifest.
+  *   - Always emit [[WorkflowEvent.TaskQueued]] when a node is first scheduled.
   *
-  * Out of scope for this task (covered by later plan tasks):
-  *   - Real `TaskRecord[A]` round-trip serialization (Tasks 48-49) — the
-  *     `value` field of the cached manifest is not yet decoded; bodies are
-  *     re-executed on cache HIT.
-  *   - `cfg.bypass` / `cfg.readOnly` / `cfg.noCache` flag handling beyond
-  *     the simplest "skip cache write if readOnly or noCache" path.
-  *   - `cfg.continueOnError` enforcement: today the field is observable on
-  *     `Workflow.Config` but the scheduler always aborts on the first task
-  *     failure. Error accumulation across siblings lands with the full
-  *     fan-out parallelism follow-up.
-  *   - True fiber-per-node parallelism: `resolveDeps` only bounds concurrency
-  *     within a single node's dep list; siblings of independent sub-graphs
-  *     are still walked one node at a time at the recursive frontier.
+  * Out of scope (unchanged):
+  *   - Real `TaskRecord[A]` round-trip serialization — bodies re-execute on HIT.
+  *   - Full `cfg.bypass` / `cfg.readOnly` / `cfg.noCache` beyond the simple path.
+  *   - `cfg.continueOnError` enforcement — still fail-fast on first error.
   */
 private[workflow] object Scheduler:
 
@@ -48,105 +37,213 @@ private[workflow] object Scheduler:
     */
   private final case class NodeResult(value: Any, valueHash: Fingerprint)
 
-  /** Resolve a chunk of dependencies, honoring `cfg.parallelism`.
+  /** Output of the planning phase: every reachable task and the edges needed
+    * for worklist scheduling.
     *
-    * For `parallelism <= 1` we fall through to `Kyo.foreach` (sequential).
-    * For `parallelism > 1` we use `Async.foreach` with a bounded concurrency
-    * cap so independent leaves can run concurrently on the JVM. The memo is
-    * an `AtomicRef`, so racing siblings that share a transitive dep stay
-    * consistent (last-writer-wins on identical [[NodeResult]] values).
-    *
-    * Simplification (documented in the file header): real fan-out parallelism
-    * across the whole DAG is bounded only by this single-level call. A node
-    * that is the only entry to a sub-graph still resolves that sub-graph
-    * sequentially at each level. A future Task will lift this to true
-    * fiber-per-node scheduling.
+    * @param tasks
+    *   all reachable tasks keyed by id
+    * @param deps
+    *   direct dependency ids per task (declaration order preserved)
+    * @param goalIds
+    *   goal task ids in caller declaration order
+    * @param order
+    *   stable execution order: dependency-before-dependent, goals in caller
+    *   order (DFS postorder)
     */
-  private def resolveDeps(
-      deps: Chunk[Task[?]],
-      memo: AtomicRef[Map[TaskId, NodeResult]],
-      cfg: Workflow.Config,
-  )(using
-      Frame,
-  ): Chunk[NodeResult] < (Async & Workflow.Services & Abort[WorkflowError]) =
-    if cfg.parallelism <= 1 || deps.size <= 1 then
-      Kyo.foreach(deps)(d => runNode(d, memo))
-    else
-      Async.foreach(deps, cfg.parallelism)(d => runNode(d, memo))
+  private final case class ExecutionPlan(
+      tasks: Map[TaskId, Task[?]],
+      deps: Map[TaskId, Chunk[TaskId]],
+      goalIds: Chunk[TaskId],
+      order: Chunk[TaskId],
+  )
 
-  /** Execute a single goal under the ambient services. */
+  /** Scheduling state for one `executeAll` run — memoised results plus the
+    * in-flight set used to avoid double-scheduling under concurrent completion.
+    */
+  private final case class ExecState(
+      results: Map[TaskId, NodeResult] = Map.empty,
+      running: Set[TaskId] = Set.empty,
+      claimed: Chunk[TaskId] = Chunk.empty,
+  )
+
+  /** Planning phase: collect the reachable graph and derive dependency edges.
+    */
+  private def plan(
+      goals: Chunk[Task[?]],
+  ): Result[WorkflowError, ExecutionPlan] =
+    Graph.collect(goals.toSeq).map { tasks =>
+      val deps = tasks.map { (id, task) => id -> Graph.depIdsOf(task) }
+      ExecutionPlan(
+        tasks   = tasks,
+        deps    = deps,
+        goalIds = goals.map(_.id),
+        order   = stableOrder(goals),
+      )
+    }
+  end plan
+
+  /** DFS postorder over goals: dependencies before dependents, each id once,
+    * goals visited in caller declaration order.
+    */
+  private def stableOrder(
+      goals: Chunk[Task[?]],
+  ): Chunk[TaskId] =
+    val visited = scala.collection.mutable.Set.empty[TaskId]
+    val result  = Chunk.newBuilder[TaskId]
+
+    def visit(task: Task[?]): Unit =
+      if visited.contains(task.id) then ()
+      else
+        Graph.depsOf(task).foreach(visit)
+        val _ = visited.add(task.id)
+        result.addOne(task.id)
+    end visit
+
+    goals.foreach(visit)
+    result.result()
+  end stableOrder
+
+  /** Execute multiple goals under one plan and shared memo; results follow
+    * `goals` declaration order.
+    */
+  def executeAll[A](goals: Chunk[Task[A]])(using
+      Frame,
+  ): Chunk[A] < (Async & Workflow & Abort[WorkflowError]) =
+    for
+      plan <- Abort.get(plan(Chunk.from(goals)))
+      vals <- Abort.recover[Closed](_ =>
+                Abort.fail(WorkflowError.TaskCancelled(TaskId.unsafe("scheduler"), "scope closed"))
+              ) {
+                Scope.run {
+                  for
+                    rt    <- Workflow.runtime
+                    cfg    = rt.config
+                    meter <- Meter.initSemaphore(concurrency = math.max(1, cfg.parallelism))
+                    state <- AtomicRef.init(ExecState())
+                    _     <- scheduleReady(plan, state, meter)
+                    vals  <- Kyo.foreach(plan.goalIds)(id =>
+                               state.get.map(_.results(id).value.asInstanceOf[A])
+                             )
+                  yield Chunk.from(vals)
+                }
+              }
+    yield vals
+
+  /** Execute a single goal under the ambient [[Workflow]] runtime. */
   def execute[A](goal: Task[A])(using
       Frame,
-  ): A < (Async & Workflow.Services & Abort[WorkflowError]) =
-    Graph.collect(Seq(goal)) match
-      case Left(err)  => Abort.fail(err)
-      case Right(_)   =>
-        for
-          memo <- AtomicRef.init(Map.empty[TaskId, NodeResult])
-          res  <- runNode(goal, memo)
-        yield res.value.asInstanceOf[A]
+  ): A < (Async & Workflow & Abort[WorkflowError]) =
+    executeAll(Chunk(goal)).map(_.head)
 
-  /** Run a node, consulting the in-process memo first. */
-  private def runNode(
-      task: Task[?],
-      memo: AtomicRef[Map[TaskId, NodeResult]],
-  )(using
-      Frame,
-  ): NodeResult < (Async & Workflow.Services & Abort[WorkflowError]) =
-    memo.get.map { current =>
-      current.get(task.id) match
-        case Some(existing) => (existing: NodeResult)
-        case None           =>
-          runFreshNode(task, memo).map { result =>
-            memo.updateAndGet(_.updated(task.id, result)).andThen(result)
-          }
-    }
-
-  /** Execute a node from scratch (no memo entry). Dispatches on the task
-    * kind.
+  /** Claim every currently-ready task atomically and launch it under the
+    * global concurrency cap. Completing tasks re-enter the worklist.
     */
-  private def runFreshNode(
-      task: Task[?],
-      memo: AtomicRef[Map[TaskId, NodeResult]],
+  private def scheduleReady(
+      plan: ExecutionPlan,
+      state: AtomicRef[ExecState],
+      meter: Meter,
   )(using
       Frame,
-  ): NodeResult < (Async & Workflow.Services & Abort[WorkflowError]) =
+  ): Unit < (Async & Scope & Sync & Workflow & Abort[WorkflowError | Closed]) =
     for
-      observer <- Env.get[Observer]
-      cfg      <- Env.get[Workflow.Config]
-      _        <- observer.onEvent(WorkflowEvent.TaskQueued(task.id))
-      result   <- task match
-                    case src: Task.Source        => runSource(src, observer)
-                    case srcs: Task.Sources      => runSources(srcs, observer)
-                    case in: Task.Input[?]       => runInput(in, observer)
-                    case c: Task.Cached[?]       => runCached(c, memo, cfg, observer)
-                    case p: Task.Persistent[?]   => runPersistent(p, memo, cfg, observer)
-                    case c: Task.Command[?]      => runCommand(c, memo, cfg, observer)
+      rt    <- Workflow.runtime
+      cfg    = rt.config
+      limit  = math.max(1, cfg.parallelism)
+      ready <- claimReady(plan, state, limit)
+      _     <- Async.foreach(ready, limit) { id =>
+                 meter.run(runPlannedNode(plan, id, state)).map { result =>
+                   for
+                     _ <- state.updateAndGet { st =>
+                            st.copy(
+                              results = st.results.updated(id, result),
+                              running = st.running - id,
+                            )
+                          }.unit
+                     _ <- scheduleReady(plan, state, meter)
+                   yield ()
+                 }
+               }
+    yield ()
+  end scheduleReady
+
+  /** Atomically select up to `limit` ready tasks in stable plan order and mark
+    * them running so concurrent schedulers cannot claim the same id.
+    */
+  private def claimReady(
+      plan: ExecutionPlan,
+      state: AtomicRef[ExecState],
+      limit: Int,
+  ): Chunk[TaskId] < Sync =
+    state.updateAndGet { st =>
+      val readyBuilder = Chunk.newBuilder[TaskId]
+      var claimed      = 0
+      plan.order.foreach { id =>
+        if claimed < limit &&
+          plan.tasks.contains(id) &&
+          !st.results.contains(id) &&
+          !st.running.contains(id) &&
+          plan.deps(id).forall(d => st.results.contains(d))
+        then
+          readyBuilder.addOne(id)
+          claimed += 1
+      }
+      val ready = readyBuilder.result()
+      st.copy(
+        running = st.running ++ ready,
+        claimed = ready,
+      )
+    }.map(_.claimed)
+
+  /** Run one planned node: emit `TaskQueued`, resolve deps from the memo, and
+    * dispatch on task kind.
+    */
+  private def runPlannedNode(
+      plan: ExecutionPlan,
+      id: TaskId,
+      state: AtomicRef[ExecState],
+  )(using
+      Frame,
+  ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
+    val task = plan.tasks(id)
+    for
+      st          <- state.get
+      depResults   = plan.deps(id).map(st.results(_))
+      rt          <- Workflow.runtime
+      observer     = rt.observer
+      cfg          = rt.config
+      _           <- observer.onEvent(WorkflowEvent.TaskQueued(id))
+      result      <- task match
+                       case src: Task.Source      => runSource(src, observer)
+                       case srcs: Task.Sources    => runSources(srcs, observer)
+                       case in: Task.Input[?]     => runInput(in, observer)
+                       case c: Task.Cached[?]     => runCached(c, depResults, cfg, observer)
+                       case p: Task.Persistent[?] => runPersistent(p, depResults, cfg, observer)
+                       case c: Task.Command[?]    => runCommand(c, depResults, observer)
     yield result
+  end runPlannedNode
 
   // ---------------------------------------------------------------------
   // Source / Input
   // ---------------------------------------------------------------------
 
   /** Source nodes: re-evaluated each run. Reads the file contents via the
-    * ambient `Env[Vfs]` and produces a [[VPathRef]] whose fingerprint is
+    * runtime VFS and produces a [[VPathRef]] whose fingerprint is
     * either the content hash ([[VPathRef.of]]) or the cheaper size+mtime
     * quick hash ([[VPathRef.quick]]), selected by `src.quick`.
-    *
-    * Downstream tasks depending on the source see the actual content hash
-    * change when the file's bytes change — that's how Source invalidates
-    * cached downstream tasks.
     */
   private def runSource(
       src: Task.Source,
       observer: Observer,
-  )(using Frame): NodeResult < (Async & Env[Vfs] & Abort[WorkflowError]) =
+  )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
     for
-      vfs     <- Env.get[Vfs]
+      rt      <- Workflow.runtime
+      vfs      = rt.vfs
       started <- Clock.now
       _       <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started.toJava))
+      ctx      = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(src.id)))
       ref     <- runBody[VPathRef](
                    src.id,
+                   ctx,
                    if src.quick then VPathRef.quick(src.path, vfs)
                    else VPathRef.of(src.path, vfs),
                  )
@@ -154,24 +251,20 @@ private[workflow] object Scheduler:
     yield NodeResult(ref, ref.fingerprint)
   end runSource
 
-  /** Multi-path Source — Mill `Sources` analogue. Reads each path's bytes
-    * (or size+mtime token when `quick`) through the ambient `Env[Vfs]` and
-    * returns a [[Chunk]] of [[VPathRef]]s preserving input order. The
-    * scheduler's NodeResult.valueHash is the order-sensitive aggregate
-    * fingerprint over the per-path fingerprints — see
-    * [[VPathRef.aggregateFingerprint]]; matching `Hashable[Chunk[VPathRef]]`
-    * lives in the same companion.
-    */
+  /** Multi-path Source — Mill `Sources` analogue. */
   private def runSources(
       src: Task.Sources,
       observer: Observer,
-  )(using Frame): NodeResult < (Async & Env[Vfs] & Abort[WorkflowError]) =
+  )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
     for
-      vfs     <- Env.get[Vfs]
+      rt      <- Workflow.runtime
+      vfs      = rt.vfs
       started <- Clock.now
       _       <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started.toJava))
+      ctx      = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(src.id)))
       refs    <- runBody[Chunk[VPathRef]](
                    src.id,
+                   ctx,
                    Kyo.foreach(src.paths)(p =>
                      if src.quick then VPathRef.quick(p, vfs)
                      else VPathRef.of(p, vfs),
@@ -188,15 +281,15 @@ private[workflow] object Scheduler:
   private def runInput(
       in: Task.Input[?],
       observer: Observer,
-  )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
+  )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
     for
+      rt      <- Workflow.runtime
       started <- Clock.now
       _       <- observer.onEvent(WorkflowEvent.TaskStarted(in.id, Chunk.empty, started.toJava))
-      value   <- runBody(in.id, in.read())
-      // Hashable.hash takes A, but in.hashable is Hashable[?] — Hashable is
-      // contravariant in effect (a hash function), so a cast is safe here.
-      vh     = in.hashable.asInstanceOf[Hashable[Any]].hash(value)
-      _     <- observer.onEvent(WorkflowEvent.TaskCompleted(in.id, vh, 0L))
+      ctx      = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(in.id)))
+      value   <- runBody(in.id, ctx, in.read())
+      vh       = in.hashable.asInstanceOf[Hashable[Any]].hash(value)
+      _       <- observer.onEvent(WorkflowEvent.TaskCompleted(in.id, vh, 0L))
     yield NodeResult(value, vh)
   end runInput
 
@@ -206,48 +299,42 @@ private[workflow] object Scheduler:
 
   private def runCached(
       task: Task.Cached[?],
-      memo: AtomicRef[Map[TaskId, NodeResult]],
+      depResults: Chunk[NodeResult],
       cfg: Workflow.Config,
       observer: Observer,
   )(using
       Frame,
-  ): NodeResult < (Async & Workflow.Services & Abort[WorkflowError]) =
+  ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
+    val depArgs  = depResults.toIndexedSeq.map(_.value)
+    val depFps   = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
+    val bodyHash = Hashing.bodyHash(task.id, task.version)
+    val expected = Hashing.inputsHash(task.id, bodyHash, depFps, task.paramHash)
+    val key      = CacheKey.fromTaskId(task.id)
     for
-      // Run dependencies first, honoring cfg.parallelism (Task 47).
-      depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
-      depArgs     = depResults.toIndexedSeq.map(_.value)
-      depFps      = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
-      // Compute hashes.
-      bodyHash    = Hashing.bodyHash(task.id, task.version)
-      expected    = Hashing.inputsHash(task.id, bodyHash, depFps, task.paramHash)
-      key         = CacheKey.fromTaskId(task.id)
-      // Read the (sentinel) cache entry.
-      existing   <- readManifest(key)
-      result     <- existing match
-                      case kyo.Present(_) if !cfg.noCache && !cfg.bypass.contains(task.id) =>
-                        cacheHit(task, depArgs, expected, observer)
-                      case _ =>
-                        cacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
+      existing <- readManifest(key)
+      result   <- existing match
+                    case kyo.Present(_) if !cfg.noCache && !cfg.bypass.contains(task.id) =>
+                      cacheHit(task, depArgs, expected, observer)
+                    case _ =>
+                      cacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
     yield result
   end runCached
 
-  /** Cache HIT: emit `TaskCached`, re-execute the body to recover the value
-    * (no value serialization yet). */
   private def cacheHit(
       task: Task.Cached[?],
       depArgs: IndexedSeq[Any],
       expected: Fingerprint,
       observer: Observer,
-  )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
+  )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
     for
       _     <- observer.onEvent(WorkflowEvent.TaskCached(task.id, expected))
-      ctx    = newTaskContext()
-      value <- runBody(task.id, task.body(ctx, depArgs))
+      rt    <- Workflow.runtime
+      key    = CacheKey.fromTaskId(task.id)
+      ctx    = newTaskContext(CacheLayout(rt.cacheRoot).destPath(key))
+      value <- runBody(task.id, ctx, task.body(ctx, depArgs))
       vh     = valueFingerprint(value)
     yield NodeResult(value, vh)
 
-  /** Cache MISS: emit `TaskStarted` + `TaskCompleted`, run the body, write
-    * a sentinel manifest so the next run is a HIT. */
   private def cacheMiss(
       task: Task.Cached[?],
       depArgs: IndexedSeq[Any],
@@ -257,14 +344,23 @@ private[workflow] object Scheduler:
       key: CacheKey,
       cfg: Workflow.Config,
       observer: Observer,
-  )(using Frame): NodeResult < (Async & Env[CacheStore] & Abort[WorkflowError]) =
+  )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
     val depIds = depFps.map(_.id)
     for
+      rt      <- Workflow.runtime
+      layout   = CacheLayout(rt.cacheRoot)
       started <- Clock.now
       _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
-      ctx      = newTaskContext()
-      value   <- runBody(task.id, task.body(ctx, depArgs))
-      vh       = valueFingerprint(value)
+      result  <- Scope.run:
+                   for
+                     dest  <- layout.openWorkspace(rt.vfs, key)
+                     ctx    = newTaskContext(dest)
+                     value <- runBody(task.id, ctx, task.body(ctx, depArgs))
+                     vh     = valueFingerprint(value)
+                     _     <- layout.sealWorkspace(rt.vfs, key)
+                   yield value -> vh
+      value    = result._1
+      vh       = result._2
       _       <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
       _       <-
         if cfg.readOnly || cfg.noCache then (() : Unit < Async)
@@ -272,39 +368,29 @@ private[workflow] object Scheduler:
     yield NodeResult(value, vh)
 
   // ---------------------------------------------------------------------
-  // Task.Persistent — mirrors Task.Cached structurally for now
+  // Task.Persistent
   // ---------------------------------------------------------------------
 
-  /** Persistent semantics differ from Cached only in `.dest/` retention
-    * (the directory persists across rebuilds and is re-presented to the
-    * body via a per-key advisory lock). The current scheduler does not
-    * yet acquire a real workspace (see Scheduler simplification notes),
-    * so this branch is structurally identical to [[runCached]]. We use
-    * `openPersistentWorkspace` (rather than `openWorkspace`) only as a
-    * placeholder for the eventual real wiring; for now no workspace is
-    * actually opened in either branch.
-    */
   private def runPersistent(
       task: Task.Persistent[?],
-      memo: AtomicRef[Map[TaskId, NodeResult]],
+      depResults: Chunk[NodeResult],
       cfg: Workflow.Config,
       observer: Observer,
   )(using
       Frame,
-  ): NodeResult < (Async & Workflow.Services & Abort[WorkflowError]) =
+  ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
+    val depArgs  = depResults.toIndexedSeq.map(_.value)
+    val depFps   = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
+    val bodyHash = Hashing.bodyHash(task.id, task.version)
+    val expected = Hashing.inputsHash(task.id, bodyHash, depFps, task.paramHash)
+    val key      = CacheKey.fromTaskId(task.id)
     for
-      depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
-      depArgs     = depResults.toIndexedSeq.map(_.value)
-      depFps      = depResults.map(r => Hashing.DepFingerprint(taskIdOf(task.deps, depResults, r), r.valueHash))
-      bodyHash    = Hashing.bodyHash(task.id, task.version)
-      expected    = Hashing.inputsHash(task.id, bodyHash, depFps, task.paramHash)
-      key         = CacheKey.fromTaskId(task.id)
-      existing   <- readManifest(key)
-      result     <- existing match
-                      case kyo.Present(_) if !cfg.noCache && !cfg.bypass.contains(task.id) =>
-                        persistentCacheHit(task, depArgs, expected, observer)
-                      case _ =>
-                        persistentCacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
+      existing <- readManifest(key)
+      result   <- existing match
+                    case kyo.Present(_) if !cfg.noCache && !cfg.bypass.contains(task.id) =>
+                      persistentCacheHit(task, depArgs, expected, observer)
+                    case _ =>
+                      persistentCacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
     yield result
   end runPersistent
 
@@ -313,11 +399,13 @@ private[workflow] object Scheduler:
       depArgs: IndexedSeq[Any],
       expected: Fingerprint,
       observer: Observer,
-  )(using Frame): NodeResult < (Async & Abort[WorkflowError]) =
+  )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
     for
       _     <- observer.onEvent(WorkflowEvent.TaskCached(task.id, expected))
-      ctx    = newTaskContext()
-      value <- runBody(task.id, task.body(ctx, depArgs))
+      rt    <- Workflow.runtime
+      key    = CacheKey.fromTaskId(task.id)
+      ctx    = newTaskContext(CacheLayout(rt.cacheRoot).destPath(key))
+      value <- runBody(task.id, ctx, task.body(ctx, depArgs))
       vh     = valueFingerprint(value)
     yield NodeResult(value, vh)
 
@@ -330,13 +418,16 @@ private[workflow] object Scheduler:
       key: CacheKey,
       cfg: Workflow.Config,
       observer: Observer,
-  )(using Frame): NodeResult < (Async & Env[CacheStore] & Abort[WorkflowError]) =
+  )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
     val depIds = depFps.map(_.id)
     for
+      rt      <- Workflow.runtime
+      layout   = CacheLayout(rt.cacheRoot)
+      dest    <- layout.openPersistentWorkspace(rt.vfs, key)
       started <- Clock.now
       _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
-      ctx      = newTaskContext()
-      value   <- runBody(task.id, task.body(ctx, depArgs))
+      ctx      = newTaskContext(dest)
+      value   <- runBody(task.id, ctx, task.body(ctx, depArgs))
       vh       = valueFingerprint(value)
       _       <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
       _       <-
@@ -345,39 +436,26 @@ private[workflow] object Scheduler:
     yield NodeResult(value, vh)
 
   // ---------------------------------------------------------------------
-  // Task.Command — always runs, never caches its own output
+  // Task.Command
   // ---------------------------------------------------------------------
 
-  /** Commands run their body on every invocation and never consult or
-    * populate the cache. Dependencies are still resolved via the normal
-    * memoized path, so a single command run reuses dep results across
-    * diamond fan-ins but cross-run memoization comes only from the
-    * dependencies themselves (Cached/Persistent), not the command.
-    *
-    * Events emitted: `TaskQueued` (from `runFreshNode`), `TaskStarted`,
-    * `TaskCompleted`. Commands never emit `TaskCached`.
-    */
   private def runCommand(
       task: Task.Command[?],
-      memo: AtomicRef[Map[TaskId, NodeResult]],
-      cfg: Workflow.Config,
+      depResults: Chunk[NodeResult],
       observer: Observer,
   )(using
       Frame,
-  ): NodeResult < (Async & Workflow.Services & Abort[WorkflowError]) =
+  ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
+    val depArgs = depResults.toIndexedSeq.map(_.value)
+    val depIds  = depResults.map(r => taskIdOf(task.deps, depResults, r))
     for
-      depResults <- resolveDeps(Chunk.from(task.deps), memo, cfg)
-      depArgs     = depResults.toIndexedSeq.map(_.value)
-      depIds      = depResults.map(r => taskIdOf(task.deps, depResults, r))
-      started    <- Clock.now
-      _          <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
-      ctx         = newTaskContext()
-      value      <- runBody(task.id, task.body(ctx, depArgs))
-      // Command outputs are not consumed by downstream deps (Commands are
-      // entry points), so the valueHash is a sentinel rather than a hash
-      // of the runtime value.
-      vh          = Fingerprint.unsafe("command:nostore")
-      _          <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+      started <- Clock.now
+      _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
+      rt      <- Workflow.runtime
+      ctx      = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(task.id)))
+      value   <- runBody(task.id, ctx, task.body(ctx, depArgs))
+      vh       = Fingerprint.unsafe("command:nostore")
+      _       <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
     yield NodeResult(value, vh)
   end runCommand
 
@@ -387,27 +465,36 @@ private[workflow] object Scheduler:
 
   private def runBody[A](
       id: TaskId,
-      body: => A < (Async & Abort[Throwable]),
-  )(using Frame): A < (Async & Abort[WorkflowError]) =
-    Abort.recover[Throwable](t =>
-      Abort.fail[WorkflowError](WorkflowError.TaskFailed(id, Option(t.getMessage).getOrElse(t.toString)))
-    )(body)
+      ctx: TaskContext,
+      body: => A < Task.BodyEffects,
+  )(using Frame): A < (Async & Workflow & Abort[WorkflowError]) =
+    for
+      rt <- Workflow.runtime
+      result <- Vfs.run(rt.vfs):
+                  Abort.run[Throwable | WorkflowError](Workflow.withTaskContext(ctx)(body))
+      value <- bodyResult(id, result)
+    yield value
 
-  private def newTaskContext()(using Frame): TaskContext =
-    TaskContext(dest = io.eleven19.kymora.vfs.VPath(""))
+  private def bodyResult[A](
+      id: TaskId,
+      result: Result[Throwable | WorkflowError, A],
+  )(using Frame): A < Abort[WorkflowError] =
+    result match
+      case Result.Success(value) =>
+        value
+      case Result.Failure(error: WorkflowError) =>
+        Abort.fail(error)
+      case Result.Failure(error: Throwable) =>
+        Abort.fail[WorkflowError](WorkflowError.TaskFailed(id, Option(error.getMessage).getOrElse(error.toString)))
+      case Result.Panic(error) =>
+        Abort.fail[WorkflowError](WorkflowError.TaskFailed(id, Option(error.getMessage).getOrElse(error.toString)))
 
-  /** Best-effort fingerprint of a runtime value. Uses `Schema[String]` on
-    * the `value.toString` so we always get a deterministic-ish hash without
-    * requiring per-task `Schema[A]` threading. This is intentionally weak —
-    * proper value hashing arrives with the `Hashable[A]` threading work in
-    * Task 45+.
-    */
+  private def newTaskContext(dest: io.eleven19.kymora.vfs.VPath)(using Frame): TaskContext =
+    TaskContext(dest = dest)
+
   private def valueFingerprint(value: Any): Fingerprint =
     Fingerprint.ofBytes(Chunk.from(value.toString.getBytes))
 
-  /** Look up `taskId` of a result by reference identity in the original
-    * dep list (positional). Both lists have the same length and order.
-    */
   private def taskIdOf(
       deps: Seq[Task[?]],
       results: Chunk[NodeResult],
@@ -418,31 +505,25 @@ private[workflow] object Scheduler:
 
   private def readManifest(
       key: CacheKey,
-  )(using Frame): Maybe[StoredManifest] < (Async & Env[CacheStore] & Abort[WorkflowError]) =
+  )(using Frame): Maybe[StoredManifest] < (Async & Workflow & Abort[WorkflowError]) =
     for
-      store <- Env.get[CacheStore]
-      r     <- Abort.recover[StoreError](e => Abort.fail[WorkflowError](WorkflowError.Store(e))):
-                 store.read(key)
+      rt <- Workflow.runtime
+      r  <- CacheLayout(rt.cacheRoot).readManifest(rt.vfs, key)
     yield r
 
-  /** Write a minimal sentinel manifest — currently just the inputs hash
-    * encoded as raw UTF-8 bytes. Future work (plan Tasks 48-49) replaces
-    * this with a proper `TaskRecord[A]` JSON envelope.
-    */
   private def writeSentinel(
       key: CacheKey,
       bodyHash: Fingerprint,
       inputsHash: Fingerprint,
       valueHash: Fingerprint,
       version: TaskVersion,
-  )(using Frame): Unit < (Async & Env[CacheStore] & Abort[WorkflowError]) =
+  )(using Frame): Unit < (Async & Workflow & Abort[WorkflowError]) =
     val payload =
       s"sentinel|v=${version.render}|body=${bodyHash.value}|inputs=${inputsHash.value}|value=${valueHash.value}"
     val bytes = Chunk.from(payload.getBytes)
     for
-      store <- Env.get[CacheStore]
-      _     <- Abort.recover[StoreError](e => Abort.fail[WorkflowError](WorkflowError.Store(e))):
-                 store.write(key, bytes, Maybe.empty)
+      rt <- Workflow.runtime
+      _  <- CacheLayout(rt.cacheRoot).writeManifest(rt.vfs, key, bytes)
     yield ()
 
 end Scheduler

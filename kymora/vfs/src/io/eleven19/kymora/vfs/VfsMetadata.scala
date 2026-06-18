@@ -38,7 +38,11 @@ object VfsSize:
     given Render[VfsSize] = Render.from(_.render)
 end VfsSize
 
-/** A last-modified timestamp represented as milliseconds since the Unix epoch. */
+/** A last-modified timestamp represented as milliseconds since the Unix epoch.
+  *
+  * VFS backends report timestamps through this opaque type so callers do not accidentally mix wall-clock milliseconds
+  * with unrelated numeric values.
+  */
 opaque type VfsTimestamp = Long
 
 object VfsTimestamp:
@@ -65,7 +69,11 @@ end VfsTimestamp
 enum VfsEntryType derives CanEqual:
     case File, Directory, Symlink
 
-/** Metadata for a virtual filesystem entry. */
+/** Metadata for a virtual filesystem entry.
+  *
+  * Returned by `stat` and path-first `path.stat`; use `entryType` to decide whether the path is a file, directory, or
+  * symlink.
+  */
 final case class VfsStat(
     entryType: VfsEntryType,
     size: VfsSize,

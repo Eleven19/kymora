@@ -5,7 +5,7 @@ import kyo.*
 /** Codec-parameterised serialization typeclass for cached task outputs.
   *
   * The `Codec` is supplied at encode/decode time (provided by the engine from
-  * `Workflow.Config`), keeping `Cacheable` instances codec-agnostic — a given
+  * `Workflow.Runtime`), keeping `Cacheable` instances codec-agnostic — a given
   * `Cacheable[A]` is reusable across Json / Protobuf / future codecs. See spec
   * §3.2.
   */

@@ -13,7 +13,7 @@ import kyo.*
   *   1. Build a parameterized task:
   *      `val serve: Args => Task.Command[String] = Task.command[String, Args]("serve") { ... }`
   *   2. Parse + invoke from `Seq[String]` tokens:
-  *      `Cli.runWith(serve, args)` inside a `Workflow.Config` `Env`.
+  *      `Cli.runWith(serve, args)` inside `Workflow.handle(runtime)(...)`.
   *
   * Errors:
   *   - Parse failures from case-app surface as [[CliParseError.Failed]] on
@@ -33,7 +33,7 @@ object Cli:
       parser: Parser[P],
       help: Help[P],
       frame: Frame,
-  ): A < (Async & Workflow.Services & Abort[WorkflowError | CliParseError]) =
+  ): A < (Async & Workflow & Abort[WorkflowError | CliParseError]) =
     parser.parse(tokens) match
       case Right((p, _remainingArgs)) =>
         Workflow.run(task(p))
@@ -54,7 +54,7 @@ object Cli:
       commands: Cli.Command[?, A]*,
   )(tokens: Seq[String])(using
       frame: Frame,
-  ): A < (Async & Workflow.Services & Abort[WorkflowError | CliParseError]) =
+  ): A < (Async & Workflow & Abort[WorkflowError | CliParseError]) =
     val cmds = commands.toVector
     tokens.toList match
       case Nil =>
@@ -81,7 +81,7 @@ object Cli:
   ):
     private[cli] def runRest(rest: List[String])(using
         Frame,
-    ): A < (Async & Workflow.Services & Abort[WorkflowError | CliParseError]) =
+    ): A < (Async & Workflow & Abort[WorkflowError | CliParseError]) =
       runWith(task, rest)(using parser, help, summon[Frame])
   end Command
 

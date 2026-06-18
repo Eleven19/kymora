@@ -8,7 +8,7 @@ import kyo.*
 
 private[vfs] object InMemoryVfs:
 
-    def init(using Frame): Vfs < Sync =
+    def init(using Frame): Vfs.Backend < Sync =
         AtomicRef.init(State.empty).map(ref => InMemoryVfs(ref))
 
     final private case class State(root: Node.Directory)
@@ -29,7 +29,7 @@ end InMemoryVfs
 final private class InMemoryVfs private (
     state: AtomicRef[InMemoryVfs.State]
 )(using Frame)
-    extends Vfs:
+    extends Vfs.Backend:
     import InMemoryVfs.*
 
     def exists(path: VPath): Boolean < Sync =

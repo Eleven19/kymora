@@ -5,7 +5,7 @@ import kyo.*
 /** Consumer of the engine's [[WorkflowEvent]] stream.
   *
   * Minimal contract: `onEvent(event)` accepts a single event. The
-  * higher-level `openSession()` method returns a [[Scope]]-bound [[Observer.Session]]
+  * higher-level `openSession()` method returns a `Scope`-bound [[Observer.Session]]
   * that the engine can use to bracket a run's observer state (e.g. a JSON file
   * handle to close, a console live-progress display to tear down).
   *
@@ -20,7 +20,7 @@ trait Observer:
     * The default implementation returns a thin pass-through session that
     * delegates `onEvent` back to this observer and has a no-op `close`.
     * Observers that own real resources (open file, live display) should
-    * override this to register cleanup via [[Scope.ensure]].
+    * override this to register cleanup via `Scope.ensure`.
     */
   def openSession(): Observer.Session < (Async & Scope) =
     val self = this
@@ -35,7 +35,7 @@ object Observer:
     *
     * The engine calls `onEvent` for every emitted [[WorkflowEvent]] during a
     * run and `close` once at the end. Resource-owning observers typically
-    * register `close` with [[Scope.ensure]] so that an early failure still
+    * register `close` with `Scope.ensure` so that an early failure still
     * tears them down.
     */
   trait Session:

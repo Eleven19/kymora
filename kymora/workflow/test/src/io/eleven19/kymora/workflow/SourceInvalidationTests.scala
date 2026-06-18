@@ -6,7 +6,7 @@ import kyo.*
 import kyo.test.*
 
 /** Closes #5 §3 — proves [[Task.Source]] now content-hashes via the
-  * ambient `Env[Vfs]` rather than the prior path-string sentinel.
+  * workflow runtime VFS rather than the prior path-string sentinel.
   *
   * End-to-end downstream-cache invalidation (mutate a file, assert a
   * dependent `Task.Cached` re-runs on the next `Workflow.run`) is gated

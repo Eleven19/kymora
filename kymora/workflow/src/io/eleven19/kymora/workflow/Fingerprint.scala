@@ -3,6 +3,11 @@ package io.eleven19.kymora.workflow
 import io.eleven19.kymora.workflow.internal.Blake3
 import kyo.*
 
+/** Stable content fingerprint used for workflow cache decisions.
+  *
+  * Public fingerprints render as strings such as `blake3:<hex>`. The opaque
+  * type prevents accidentally mixing hashes with arbitrary strings.
+  */
 opaque type Fingerprint = String
 
 object Fingerprint:
