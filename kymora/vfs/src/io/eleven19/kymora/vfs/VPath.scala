@@ -32,6 +32,12 @@ object VPath:
 
     given CanEqual[VPath, VPath] = CanEqual.derived
 
+    given schema: Schema[VPath] =
+        Schema.init[VPath](
+            writeFn = (v, w) => w.string(v.show),
+            readFn = r => parseRaw(r.string())
+        )
+
     /** The absolute virtual filesystem root, rendered as `/`. */
     val root: VPath = Data(isAbsolute = true, Chunk.empty)
 

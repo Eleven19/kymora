@@ -18,6 +18,6 @@ class TaskPersistentTests extends Test[Any]:
     val t   = Task.persistent("p")(dep) { x => x + 1 }
     val p   = t.asInstanceOf[Task.Persistent[Int]]
     assert(p.deps.size == 1)
-    assert(p.deps.head.eq(dep))
+    assert(p.deps.head.asTask.asInstanceOf[AnyRef] eq dep)
   }
 end TaskPersistentTests

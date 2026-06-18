@@ -11,16 +11,21 @@ for the architecture and conventions.
 ## Overview
 
 - `Task[A]` — sealed trait. Variants: `Task.Cached`, `Task.Persistent`,
-  `Task.Source`, `Task.Sources`, `Task.Input`, `Task.Command`. All built
+  `Task.Activity`, `Task.Source`, `Task.Sources`, `Task.Input`, `Task.Command`.
+  All built
   via `Task.<kind>` smart constructors:
   - `Task.cached` (canonical) / `Task.init` (alias) — cached
   - `Task.persistent` — persisted-output
+  - `Task.activity` — graph-internal work that always runs and never stores
+    its own output
   - `Task.source` / `Task.sourceQuick` — single-path file input
   - `Task.sources` / `Task.sourcesQuick` — multi-path (Mill `Sources`
     analogue); produces an ordered `Chunk[VPathRef]` with an
     order-sensitive aggregate fingerprint
   - `Task.input` — pure-value input
-  - `Task.command` — always-runs command
+  - `Task.command` — always-runs command, intended for CLI/tooling edges
+- `AnyTask` — top-level opaque wrapper for heterogeneous internal collections
+  of tasks without exposing `Task[?]` as the public ergonomic story.
 - **Parameterized variants:** `Task.cached[A, P]`, `Task.persistent[A, P]`,
   and `Task.command[A, P]` return a `P => Task[A]` (or `P => Command[A]`).
   For Cached/Persistent, `P` participates in the cache key via
@@ -35,8 +40,8 @@ for the architecture and conventions.
     Override those defaults with named arguments when needed.
   - `Workflow.Runtime.default` creates an in-memory runtime using the same
     defaults.
-  - `Workflow.context` / `Workflow.dest` expose the task context inside task
-    bodies.
+  - `Workflow.context` / `Workflow.dest` expose the task context while a task
+    value is being evaluated.
 - `Workflow.run(goal)` / `runAll(goals*)` — engine entry points;
   signatures take `Async & Workflow & Abort[WorkflowError]`. `task()` is
   shorthand for `Workflow.run(task)`.
@@ -84,7 +89,7 @@ Workflow.handle(runtime) {
 
 ## Task Workspaces
 
-Task bodies can access their engine-managed destination directory through
+Task values can access their engine-managed destination directory through
 `Workflow.dest` and use normal VFS path syntax:
 
 ```scala
@@ -98,8 +103,9 @@ val writeReport = Task.cached("report") {
 ```
 
 Cached tasks run in a temporary `.dest.tmp` workspace and seal it into `.dest`
-after success. Persistent tasks run directly in `.dest`, so state can survive
-between invocations:
+after success. A later cache hit decodes the stored value and does not evaluate
+the task value again. Persistent tasks run directly in `.dest`, so state can
+survive invalidating invocations:
 
 ```scala
 val stateful = Task.persistent("stateful") {
@@ -113,13 +119,14 @@ val stateful = Task.persistent("stateful") {
 }
 ```
 
-## Inputs And Cache Keys
+## Task Kinds
 
-`Task.source` and `Task.sources` hash files through the runtime VFS and feed the
-result into downstream cache keys. `Task.input` reads arbitrary effectful values
-and hashes them through `Hashable[A]`. `Task.cached` and `Task.persistent`
-combine task id, version, dependency fingerprints, and parameter hashes to decide
-whether work is cached.
+Each task kind is useful in a different part of the graph. These examples all
+wire dependencies so the cache behavior is visible.
+
+### Source
+
+Use a single path as a content-hashed file input:
 
 ```scala
 val source = Task.source("source")(VPath.root / "src" / "Main.scala")
@@ -128,7 +135,132 @@ val compile = Task.cached("compile")(source) { ref =>
 }
 ```
 
-Use `TaskVersion` to intentionally invalidate a task body:
+### Sources
+
+Use ordered multi-path inputs when reordering is meaningful:
+
+```scala
+val sourceFiles =
+  Task.sources("sources")(
+    VPath.root / "src" / "Main.scala",
+    VPath.root / "src" / "Util.scala",
+  )
+
+val digest = Task.cached("digest")(sourceFiles) { refs =>
+  refs.map(_.fingerprint.value).mkString("\n")
+}
+```
+
+### Input
+
+Use `Task.input` for non-file values that should influence downstream cache
+keys:
+
+```scala
+var scalaVersion = "3.8.4"
+val version = Task.input("scalaVersion")(scalaVersion)
+val report = Task.cached("version-report")(version) { v =>
+  s"compiled with Scala $v"
+}
+```
+
+### Cached
+
+`Task.cached` stores a typed `TaskRecord[A]`. A valid hit decodes the stored
+value and skips evaluation:
+
+```scala
+final case class Report(name: String, total: Int) derives Schema
+
+val count = new java.util.concurrent.atomic.AtomicInteger(0)
+val report = Task.cached("report") {
+  Report("run", count.incrementAndGet())
+}
+```
+
+### Persistent
+
+`Task.persistent` has the same typed record semantics as `Task.cached`, but it
+evaluates in a preserved `.dest` directory when invalidated:
+
+```scala
+var revision = 1
+val input = Task.input("revision")(revision)
+
+val stateful = Task.persistent("stateful")(input) { _ =>
+  for
+    dest <- Workflow.dest
+    marker = dest / "marker.txt"
+    vfs <- Vfs.get
+    exists <- vfs.exists(marker)
+    value <- if exists then marker.read else marker.write("first").map(_ => "first")
+  yield value
+}
+```
+
+### Activity
+
+`Task.activity` is non-cached graph-internal work. It evaluates once per
+workflow execution, never writes a record, and still hashes its value for cached
+dependents:
+
+```scala
+val clock = Task.activity("clock")(System.currentTimeMillis())
+val formatted = Task.cached("formatted-clock")(clock) { millis =>
+  s"clock=$millis"
+}
+```
+
+### Command
+
+`Task.command` is for CLI/tooling entrypoints. Commands always run when selected
+as goals; their dependencies still cache normally:
+
+```scala
+val packageJar = Task.cached("package")(source) { ref =>
+  s"jar for ${ref.path.show}"
+}
+
+val publish = Task.command("publish")(packageJar) { jar =>
+  Console.printLine(s"publishing $jar").map(_ => jar)
+}
+```
+
+Prefer `Task.activity` for ordinary graph-internal non-cached work. Use
+`Task.command` at the edge where a tool or CLI action is the selected goal.
+
+## Cache Typeclasses
+
+`Task.cached`, `Task.init`, and `Task.persistent` require `Cacheable[A]` and
+`Hashable[A]` for their output type. For most values, deriving `Schema` is
+enough because workflow provides Schema-backed defaults:
+
+```scala
+final case class Report(name: String, total: Int) derives Schema
+
+val report = Task.cached("report") {
+  Report("run", 1)
+}
+```
+
+You can also derive `Cacheable` explicitly:
+
+```scala
+final case class ExplicitReport(name: String) derives Schema, Cacheable
+```
+
+Define a manual `Cacheable[A]` if the encoded cache value needs a custom schema
+or migration strategy, and define a custom `Hashable[A]` when downstream
+invalidation should ignore or normalize part of the value:
+
+```scala
+final case class Seed(stable: Int, volatile: Int) derives Schema
+
+given Hashable[Seed] =
+  seed => summon[Hashable[Int]].hash(seed.stable)
+```
+
+Use `TaskVersion` to intentionally invalidate a task value:
 
 ```scala
 val bundle = Task.cached("bundle", TaskVersion(2, 0, 0)) {
@@ -138,7 +270,7 @@ val bundle = Task.cached("bundle", TaskVersion(2, 0, 0)) {
 
 ## Errors And Observability
 
-Workflow execution fails through `Abort[WorkflowError]`. Task bodies may fail
+Workflow execution fails through `Abort[WorkflowError]`. Task values may fail
 with either ordinary `Throwable`s or `WorkflowError`s; throwables are bridged to
 `WorkflowError.TaskFailed`.
 
@@ -172,6 +304,10 @@ See [`kymora-examples`](../examples) for:
 See [`kymora-workflow-testkit`](../workflow-testkit) for `WorkflowTestDriver`,
 `TestClock`, `CollectingObserver`, `InMemoryCacheStore`, and `TaskBuilder`
 ObjectMothers.
+
+Behavior requirements are documented in
+[`docs/behavior.ears.md`](docs/behavior.ears.md). Requirement families map to
+the workflow test suites named in that file.
 
 ## Gotchas
 

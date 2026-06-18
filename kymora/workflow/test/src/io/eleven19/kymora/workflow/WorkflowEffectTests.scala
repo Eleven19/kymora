@@ -87,8 +87,10 @@ class WorkflowEffectTests extends Test[Any]:
             assert(text == "generated report")
     }
 
-    "Persistent tasks reuse .dest across invocations" in {
-        val goal = Task.persistent("persist") {
+    "Persistent tasks decode cached values and preserve .dest when invalidated" in {
+        var revision = 1
+        val input    = Task.input("revision")(revision)
+        val goal = Task.persistent("persist")(input) { _ =>
             for
                 dest <- Workflow.dest
                 marker = dest / "marker.txt"
@@ -105,13 +107,18 @@ class WorkflowEffectTests extends Test[Any]:
             first  <- driver.run(goal)
             _      <- driver.vfs.write(marker, "second")
             second <- driver.run(goal)
+            _       = revision = 2
+            third  <- driver.run(goal)
         yield
             assert(first == "first")
-            assert(second == "second")
+            assert(second == "first")
+            assert(third == "second")
     }
 
-    "PR example: persistent task reuses its Workflow.dest marker" in {
-        val stateful = Task.persistent("stateful") {
+    "PR example: persistent task reuses its Workflow.dest marker after invalidation" in {
+        var revision = 1
+        val input    = Task.input("stateful-revision")(revision)
+        val stateful = Task.persistent("stateful")(input) { _ =>
             for
                 dest <- Workflow.dest
                 marker = dest / "marker.txt"
@@ -127,9 +134,12 @@ class WorkflowEffectTests extends Test[Any]:
             first  <- driver.run(stateful)
             _      <- driver.vfs.write(marker, "second")
             second <- driver.run(stateful)
+            _       = revision = 2
+            third  <- driver.run(stateful)
         yield
             assert(first == "first")
-            assert(second == "second")
+            assert(second == "first")
+            assert(third == "second")
     }
 
     "Task bodies can fail with public WorkflowError" in {
