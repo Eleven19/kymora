@@ -1,0 +1,15 @@
+//| mvnDeps:
+//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+package build
+
+import io.eleven19.kymora.kyo.mill.ffi.*
+import io.eleven19.kymora.kyo.mill.test.*
+import mill.*, scalalib.*, scalanativelib.*
+
+object app extends KyoFfiNativeModule {
+  def scalaVersion = "3.8.4"
+  def scalaNativeVersion = "0.5.11"
+  override def ffiLibraryId = Task { "nativevendored" }
+
+  object test extends ScalaNativeTests with KyoTestNativeModule
+}

@@ -1,0 +1,23 @@
+//| mvnDeps:
+//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+package build
+
+import mill.*, scalalib.*
+import io.eleven19.kymora.kyo.mill.ffi.*
+import io.eleven19.kymora.kyo.mill.test.*
+
+object app extends KyoFfiModule {
+  def scalaVersion = "3.8.4"
+
+  override def sources = Task.Sources(moduleDir / os.up / "src" / "main" / "scala")
+  override def ffiCSourceRoots = Task.Sources(moduleDir / os.up / "src" / "main" / "c")
+  override def ffiLibraryId = Task { "math" }
+  override def ffiRuntimeJavaOptions = Task {
+    super.ffiRuntimeJavaOptions() ++ Seq("--enable-native-access=ALL-UNNAMED")
+  }
+
+  object test extends ScalaTests with KyoTestModule with KyoFfiTests {
+    override def sources = Task.Sources(moduleDir / os.up / os.up / "test" / "src")
+    override def ffiRuntimeJavaOptions = app.ffiRuntimeJavaOptions()
+  }
+}

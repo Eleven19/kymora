@@ -18,6 +18,10 @@ host-backed, or mounted filesystems.
 - [`kymora-workflow-testkit`](kymora/workflow-testkit) — published test helpers for
   `kymora-workflow` (in-memory cache, fake clock, event capture, graph
   ObjectMothers). Published for JVM, Scala.js, Scala.js WASM, and Scala Native.
+- [`kymora-kyo-mill`](kymora/kyo/mill) — JVM-only Mill plugin artifact with
+  native Mill integrations for Kyo test modules, Scala.js WebAssembly defaults,
+  doctest validation, compat artifact selection, and Kyo FFI codegen/native
+  packaging.
 - `kymora-examples` (JVM-only, unpublished) — runnable reference examples:
   `smile-build` (Mill-style build DSL) and `agent-skills` (workflow-backed agent
   skill runner).

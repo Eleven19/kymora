@@ -108,6 +108,41 @@ jobs:
       - name: Run JS tests
         run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-js kymora.vfs.js.test + kymora.workflow.js.test + kymora.workflow-testkit.js.test
 
+  build-kyo-mill:
+    name: Build & Test (Kyo Mill Plugin)
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install native toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang libunwind-dev libgc-dev
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Setup Mill remote cache
+        uses: actions/cache@v4
+        with:
+          path: .mill-remote-cache
+          key: ${{ runner.os }}-mill-remote-kyo-mill-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-mill-remote-kyo-mill-
+
+      - name: Run Kyo Mill plugin tests
+        run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-kyo-mill kymora.kyo.mill.jvm.test + kymora.kyo.mill.jvm.integration
+
   build-wasm:
     name: Build & Test (Scala.js WASM)
     needs: [build]

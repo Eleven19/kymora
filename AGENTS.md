@@ -65,13 +65,16 @@ code is usually more accurate and easier to correlate with published artifacts.
 - `kymora/<module>/package.mill` — one per module, cross-platform
   (`jvm` / `js` / `wasm` / `native` objects). Sources in `kymora/<module>/src`, tests in
   `kymora/<module>/test/src`.
+- `kymora/kyo/mill` — JVM-only published Mill plugin artifact
+  (`kymora-kyo-mill`) for downstream Kyo users.
 - `kymora/package.mill.yaml` — the published `kymora` umbrella aggregate.
 
 Current modules: `kymora-vfs` (`kymora/vfs`), `kymora-workflow`
 (`kymora/workflow`, depends on `vfs`) and its `kymora-workflow-testkit`
-(`kymora/workflow-testkit`) companion. There is also an unpublished
-`kymora-examples` (`kymora/examples`, JVM-only) carrying runnable reference
-examples (`smile-build`, `agent-skills`).
+(`kymora/workflow-testkit`) companion, plus `kymora-kyo-mill`
+(`kymora/kyo/mill`). There is also an unpublished `kymora-examples`
+(`kymora/examples`, JVM-only) carrying runnable reference examples
+(`smile-build`, `agent-skills`).
 
 `kymora-workflow` is the DAG / incremental-execution library; its
 `kymora-workflow-testkit` companion publishes the in-memory cache, fake clock,
@@ -87,13 +90,15 @@ generally useful for testing workflows belongs in the published testkit module.
   `-Wvalue-discard`, `-Wnonunit-statement`. Code must be warning-clean.
 - Format with scalafmt (config in `.scalafmt.conf`); `CommonScalaModule` mixes in
   `ScalafmtModule`.
-- Tests use **kyo-test** (Kyo's own framework). Kyo ships no Mill support, so the
-  meta-build provides `KyoTestModule` / `KyoTestJSModule` / `KyoTestWasmModule` /
-  `KyoTestNativeModule` (in `Modules.scala`) — they set the per-platform
-  `sbt.testing.Framework` class and pull `kyo-core` + `kyo-test-api` +
-  `kyo-test-runner`. WASM tests require Node 24+. Mix the matching trait into
-  each platform's `test` object. Suites extend `kyo.test.Test[Any]`; import
-  `kyo.*` and `kyo.test.*`, write `"name" in { assert(...) }`.
+- Tests use **kyo-test** (Kyo's own framework). The meta-build currently
+  provides internal `KyoTestModule` / `KyoTestJSModule` /
+  `KyoTestWasmModule` / `KyoTestNativeModule` traits in `Modules.scala`; the
+  published downstream equivalent lives in `kymora-kyo-mill`. They set the
+  per-platform `sbt.testing.Framework` class and pull `kyo-core` +
+  `kyo-test-api` + `kyo-test-runner`. WASM tests require Node 24+. Mix the
+  matching trait into each platform's `test` object. Suites extend
+  `kyo.test.Test[Any]`; import `kyo.*` and `kyo.test.*`, write
+  `"name" in { assert(...) }`.
 - Pin shared dependency versions in `KymoraVersions`, not inline in modules.
 
 ### Adding a module

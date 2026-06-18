@@ -1,0 +1,61 @@
+package build.kymora.kyo.mill
+
+import mill.*, scalalib.*
+
+trait KyoMillModule extends _root_.build.CommonScalaModule with _root_.build.PublishSupport {
+
+    override def artifactName = "kymora-kyo-mill"
+
+    override def platformSuffix = "_mill1"
+
+    override def sources = Task.Sources(
+        moduleDir / os.up / "src"
+    )
+
+    override def mvnDeps = Seq(
+        mvn"com.lihaoyi:mill-libs-scalalib_3:${_root_.build.KymoraVersions.Mill}",
+        mvn"com.lihaoyi:mill-libs-scalajslib_3:${_root_.build.KymoraVersions.Mill}",
+        mvn"com.lihaoyi:mill-libs-scalanativelib_3:${_root_.build.KymoraVersions.Mill}"
+    )
+
+    override protected def resolvedDepsWarnNonPlatform = Task { false }
+}
+
+object jvm extends KyoMillModule {
+    object test extends ScalaTests with TestModule.Utest {
+        override def sources = Task.Sources(
+            moduleDir / os.up / os.up / "test" / "src"
+        )
+
+        override def mvnDeps = Task {
+            super.mvnDeps() ++ Seq(
+                mvn"com.lihaoyi:mill-testkit_3:${_root_.build.KymoraVersions.Mill}"
+            )
+        }
+    }
+
+    object integration extends ScalaTests with TestModule.Utest {
+        override def sources = Task.Sources(
+            moduleDir / os.up / os.up / "integration" / "src"
+        )
+
+        override def resources = Task.Sources(
+            moduleDir / os.up / os.up / "integration" / "resources"
+        )
+
+        override def mvnDeps = Task {
+            super.mvnDeps() ++ Seq(
+                mvn"com.lihaoyi:mill-testkit_3:${_root_.build.KymoraVersions.Mill}"
+            )
+        }
+
+        override def forkEnv = Task {
+            val localRepo = jvm.publishLocalTestRepo().path.toIO.getCanonicalFile.toURI.toASCIIString
+            val repos = Seq(localRepo) ++
+                Seq(Task.env.getOrElse("COURSIER_REPOSITORIES", "ivy2Local|central"))
+            Map(
+                "COURSIER_REPOSITORIES" -> repos.mkString("|")
+            )
+        }
+    }
+}
