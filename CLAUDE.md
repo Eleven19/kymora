@@ -23,12 +23,20 @@ symlink to it.
 ## Build (Mill)
 
 Use the bundled `./mill` wrapper (Mill 1.1.6, JDK Temurin 25 — auto-provisioned).
+When using Nushell, run Mill through the Nushell launcher: `nu mill.nu <task>`.
 
 ```sh
 ./mill resolve __                  # list the module tree
 ./mill kymora.core.jvm.compile     # compile a module (platform: jvm | js | native)
 ./mill kymora.core.jvm.test        # run a module's tests
 ./mill __.compile                  # compile everything
+```
+
+```nu
+nu mill.nu resolve __                  # list the module tree
+nu mill.nu kymora.core.jvm.compile     # compile a module (platform: jvm | js | native)
+nu mill.nu kymora.core.jvm.test        # run a module's tests
+nu mill.nu __.compile                  # compile everything
 ```
 
 Verify changes with `compile` + `test` on at least the `jvm` platform of any
