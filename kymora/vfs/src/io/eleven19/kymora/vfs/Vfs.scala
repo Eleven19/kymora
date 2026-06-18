@@ -1,6 +1,7 @@
 package io.eleven19.kymora.vfs
 
 import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 
 import kyo.*
 import kyo.kernel.ContextEffect
@@ -243,6 +244,167 @@ object Vfs:
             createFolders: Boolean = true
         ): Unit < (Sync & Abort[VfsError])
 
+        /** Writes byte chunks from a Kyo stream, replacing any existing file.
+          *
+          * The stream is drained incrementally through [[writeStream]] rather than collected in memory.
+          *
+          * {{{
+          * val bytes = Stream.init(Chunk(Chunk[Byte](1, 2), Chunk[Byte](3, 4)))
+          * Scope.run(vfs.writeBytesStream(VPath.root / "artifact.bin", bytes))
+          * }}}
+          */
+        def writeBytesStream[S](
+            path: VPath,
+            value: Stream[Chunk[Byte], S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = false, createFolders)
+                _      <- value.foreach(handle.writeBytes)
+            yield ()
+
+        /** Appends byte chunks from a Kyo stream to a file. */
+        def appendBytesStream[S](
+            path: VPath,
+            value: Stream[Chunk[Byte], S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = true, createFolders)
+                _      <- value.foreach(handle.writeBytes)
+            yield ()
+
+        /** Writes UTF-8 text fragments from a Kyo stream, replacing any existing file.
+          *
+          * The stream is drained incrementally through [[writeStream]] rather than collected in memory.
+          *
+          * {{{
+          * val logs = Stream.init(Chunk("start\n", "done\n"))
+          * Scope.run(vfs.writeTextStream(VPath.root / "logs" / "build.log", logs))
+          * }}}
+          */
+        def writeTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            writeTextStream(path, value, StandardCharsets.UTF_8, createFolders)
+
+        /** Writes text fragments from a Kyo stream with the provided charset, creating parent folders. */
+        def writeTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            writeTextStream(path, value, charset, createFolders = true)
+
+        /** Writes text fragments from a Kyo stream with the provided charset, replacing any existing file. */
+        def writeTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset,
+            createFolders: Boolean
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = false, createFolders)
+                _      <- value.foreach(chunk => handle.writeString(chunk, charset))
+            yield ()
+
+        /** Appends UTF-8 text fragments from a Kyo stream to a file. */
+        def appendTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            appendTextStream(path, value, StandardCharsets.UTF_8, createFolders)
+
+        /** Appends text fragments from a Kyo stream with the provided charset, creating parent folders. */
+        def appendTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            appendTextStream(path, value, charset, createFolders = true)
+
+        /** Appends text fragments from a Kyo stream with the provided charset to a file. */
+        def appendTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset,
+            createFolders: Boolean
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = true, createFolders)
+                _      <- value.foreach(chunk => handle.writeString(chunk, charset))
+            yield ()
+
+        /** Writes UTF-8 lines from a Kyo stream, replacing any existing file.
+          *
+          * Each emitted line is written with a trailing newline, matching [[writeLines]].
+          *
+          * {{{
+          * val report = Stream.init(Chunk("tests=42", "failed=0"))
+          * Scope.run(vfs.writeLinesStream(VPath.root / "reports" / "summary.txt", report))
+          * }}}
+          */
+        def writeLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            writeLinesStream(path, value, StandardCharsets.UTF_8, createFolders)
+
+        /** Writes lines from a Kyo stream with the provided charset, creating parent folders. */
+        def writeLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            writeLinesStream(path, value, charset, createFolders = true)
+
+        /** Writes lines from a Kyo stream with the provided charset, replacing any existing file. */
+        def writeLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset,
+            createFolders: Boolean
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = false, createFolders)
+                _      <- value.foreach(line => handle.writeString(line + "\n", charset))
+            yield ()
+
+        /** Appends UTF-8 lines from a Kyo stream to a file.
+          *
+          * Each emitted line is written with a trailing newline, matching [[appendLines]].
+          */
+        def appendLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            appendLinesStream(path, value, StandardCharsets.UTF_8, createFolders)
+
+        /** Appends lines from a Kyo stream with the provided charset, creating parent folders. */
+        def appendLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            appendLinesStream(path, value, charset, createFolders = true)
+
+        /** Appends lines from a Kyo stream with the provided charset to a file. */
+        def appendLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset,
+            createFolders: Boolean
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = true, createFolders)
+                _      <- value.foreach(line => handle.writeString(line + "\n", charset))
+            yield ()
+
         /** Truncates or expands a file to the requested size. */
         def truncate(path: VPath, size: VfsSize): Unit < (Sync & Abort[VfsError])
 
@@ -385,7 +547,8 @@ object Vfs:
 
         /** Opens a scoped write handle for streaming writes.
           *
-          * The returned handle is valid only within the surrounding `Scope`.
+          * The returned handle is valid only within the surrounding `Scope`. Use `writeBytesStream`, `writeTextStream`,
+          * or `writeLinesStream` when an existing Kyo stream should be drained directly to a file.
           */
         def writeStream(
             path: VPath,
@@ -624,6 +787,72 @@ extension (path: VPath)
             _   <- vfs.writeLines(path, value, createFolders)
         yield ()
 
+    /** Writes byte chunks from a Kyo stream to this path using [[Vfs]]. */
+    def writeBytesStream[S](
+        value: Stream[Chunk[Byte], S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeBytesStream(path, value, createFolders)
+        yield ()
+
+    /** Writes UTF-8 text fragments from a Kyo stream to this path using [[Vfs]]. */
+    def writeTextStream[S](
+        value: Stream[String, S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeTextStream(path, value, createFolders)
+        yield ()
+
+    /** Writes text fragments from a Kyo stream to this path using [[Vfs]]. */
+    def writeTextStream[S](
+        value: Stream[String, S],
+        charset: Charset
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        writeTextStream(value, charset, createFolders = true)
+
+    /** Writes text fragments from a Kyo stream to this path using [[Vfs]], optionally creating parents. */
+    def writeTextStream[S](
+        value: Stream[String, S],
+        charset: Charset,
+        createFolders: Boolean
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeTextStream(path, value, charset, createFolders)
+        yield ()
+
+    /** Writes UTF-8 lines from a Kyo stream to this path using [[Vfs]]. */
+    def writeLinesStream[S](
+        value: Stream[String, S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeLinesStream(path, value, createFolders)
+        yield ()
+
+    /** Writes lines from a Kyo stream to this path using [[Vfs]]. */
+    def writeLinesStream[S](
+        value: Stream[String, S],
+        charset: Charset
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        writeLinesStream(value, charset, createFolders = true)
+
+    /** Writes lines from a Kyo stream to this path using [[Vfs]], optionally creating parents. */
+    def writeLinesStream[S](
+        value: Stream[String, S],
+        charset: Charset,
+        createFolders: Boolean
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeLinesStream(path, value, charset, createFolders)
+        yield ()
+
     /** Appends UTF-8 text to this path using [[Vfs]]. */
     def append(
         value: String,
@@ -670,6 +899,72 @@ extension (path: VPath)
         for
             vfs <- Vfs.get
             _   <- vfs.appendLines(path, value, createFolders)
+        yield ()
+
+    /** Appends byte chunks from a Kyo stream to this path using [[Vfs]]. */
+    def appendBytesStream[S](
+        value: Stream[Chunk[Byte], S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendBytesStream(path, value, createFolders)
+        yield ()
+
+    /** Appends UTF-8 text fragments from a Kyo stream to this path using [[Vfs]]. */
+    def appendTextStream[S](
+        value: Stream[String, S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendTextStream(path, value, createFolders)
+        yield ()
+
+    /** Appends text fragments from a Kyo stream to this path using [[Vfs]]. */
+    def appendTextStream[S](
+        value: Stream[String, S],
+        charset: Charset
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        appendTextStream(value, charset, createFolders = true)
+
+    /** Appends text fragments from a Kyo stream to this path using [[Vfs]], optionally creating parents. */
+    def appendTextStream[S](
+        value: Stream[String, S],
+        charset: Charset,
+        createFolders: Boolean
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendTextStream(path, value, charset, createFolders)
+        yield ()
+
+    /** Appends UTF-8 lines from a Kyo stream to this path using [[Vfs]]. */
+    def appendLinesStream[S](
+        value: Stream[String, S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendLinesStream(path, value, createFolders)
+        yield ()
+
+    /** Appends lines from a Kyo stream to this path using [[Vfs]]. */
+    def appendLinesStream[S](
+        value: Stream[String, S],
+        charset: Charset
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        appendLinesStream(value, charset, createFolders = true)
+
+    /** Appends lines from a Kyo stream to this path using [[Vfs]], optionally creating parents. */
+    def appendLinesStream[S](
+        value: Stream[String, S],
+        charset: Charset,
+        createFolders: Boolean
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendLinesStream(path, value, charset, createFolders)
         yield ()
 
     /** Creates this path as a directory using [[Vfs]]. */

@@ -40,6 +40,81 @@ val result =
 `Vfs.run` handles both `Vfs` and `ReadonlyVfs`, so mixed read/write programs only
 need one handler.
 
+## Stream Writes
+
+Use the `write*Stream` helpers when data is already available as a Kyo
+`Stream`. These helpers drain the stream incrementally through VFS instead of
+collecting it first:
+
+```scala
+val artifact =
+  for
+    backend <- Vfs.inMemory.init
+    bytes = Stream.init(
+      Chunk(
+        Chunk.from("CAFEBABE".getBytes.toSeq),
+        Chunk.from("-bytecode".getBytes.toSeq)
+      )
+    )
+    path = VPath.root / "target" / "classes" / "Main.class"
+    _    <- Scope.run(backend.writeBytesStream(path, bytes))
+    read <- backend.read(path)
+  yield read
+```
+
+Text streams are useful for logs and generated files:
+
+```scala
+val logs =
+  for
+    backend <- Vfs.inMemory.init
+    path = VPath.root / "logs" / "compile.log"
+    fragments = Stream.init(Chunk("compile: started\n", "compile: finished\n"))
+    _    <- Scope.run(backend.writeTextStream(path, fragments))
+    text <- backend.read(path)
+  yield text
+```
+
+Line streams write one trailing newline per emitted line, matching
+`writeLines`:
+
+```scala
+val report =
+  for
+    backend <- Vfs.inMemory.init
+    path = VPath.root / "reports" / "summary.txt"
+    lines = Stream.init(Chunk("tests=42", "failed=0"))
+    _      <- Scope.run(backend.writeLinesStream(path, lines))
+    parsed <- backend.readLines(path)
+  yield parsed
+```
+
+Append variants preserve existing content:
+
+```scala
+val appended =
+  for
+    backend <- Vfs.inMemory.init
+    path = VPath.root / "logs" / "build.log"
+    _       <- backend.write(path, "build: queued\n")
+    updates = Stream.init(Chunk("build: running\n", "build: done\n"))
+    _       <- Scope.run(backend.appendTextStream(path, updates))
+    text    <- backend.read(path)
+  yield text
+```
+
+The same APIs are available path-first inside `Vfs.run`:
+
+```scala
+val program =
+  for
+    path = VPath.root / "generated" / "routes.conf"
+    lines = Stream.init(Chunk("GET /health", "POST /compile"))
+    _    <- Scope.run(path.writeLinesStream(lines))
+    text <- path.read
+  yield text
+```
+
 ## Directories And Temp Dirs
 
 Use `mkDir` when creating one known directory whose parent already exists, and
