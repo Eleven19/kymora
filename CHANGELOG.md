@@ -13,6 +13,6 @@ GitHub release body.
 
 ### Added
 
-- Initial project setup: Mill cross-platform build (`kymora-core`, `kymora-vfs`)
+- Initial project setup: Mill cross-platform build (`kymora-vfs`)
   on JVM / JS / Native, kyo-test test framework, and CI / publish / release
   GitHub Actions workflows.

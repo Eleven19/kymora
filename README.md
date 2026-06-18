@@ -8,7 +8,6 @@ host-backed, or mounted filesystems.
 
 ## Modules
 
-- [`kymora-core`](kymora/core) — shared primitives for the rest of the suite.
 - [`kymora-vfs`](kymora/vfs) — Kyo effects for read-only and writable virtual
   filesystem access over host, in-memory, and mounted backends.
 - [`kymora-workflow`](kymora/workflow) — Kyo-native DAG task-graph engine with

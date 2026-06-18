@@ -18,16 +18,13 @@ trait VfsModule extends _root_.build.CommonScalaModule
 trait VfsJSModule extends VfsModule with _root_.build.CommonScalaJSModule
 
 object jvm extends VfsModule {
-    override def moduleDeps = Seq(build.kymora.core.jvm)
     object test extends ScalaTests with _root_.build.KyoTestModule
 }
 
 object js extends VfsJSModule {
-    override def moduleDeps = Seq(build.kymora.core.js)
     object test extends ScalaJSTests with _root_.build.KyoTestJSModule
 }
 
 object native extends VfsModule with _root_.build.CommonScalaNativeModule {
-    override def moduleDeps = Seq(build.kymora.core.native)
     object test extends ScalaNativeTests with _root_.build.KyoTestNativeModule
 }

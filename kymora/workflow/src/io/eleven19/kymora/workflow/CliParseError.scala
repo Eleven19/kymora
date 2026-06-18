@@ -8,8 +8,8 @@ import kyo.*
   * usage-style failures without polluting the engine's error surface.
   *
   * `Schema` is derived (see [[WorkflowError]] for the same explanation): the
-  * `TaskId` companion provides an explicit `given Schema[TaskId]`, so the
-  * kyo-schema 1.0.0-RC2 macro can auto-derive for variants that carry it.
+  * `TaskId` companion provides an explicit `given Schema[TaskId]`, so variants
+  * that carry task ids keep the public string encoding.
   */
 sealed trait CliParseError derives CanEqual, Schema
 object CliParseError:

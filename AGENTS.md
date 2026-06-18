@@ -26,15 +26,15 @@ When using Nushell, run Mill through the Nushell launcher: `nu mill.nu <task>`.
 
 ```sh
 ./mill resolve __                  # list the module tree
-./mill kymora.core.jvm.compile     # compile a module (platform: jvm | js | native)
-./mill kymora.core.jvm.test        # run a module's tests
+./mill kymora.vfs.jvm.compile      # compile a module (platform: jvm | js | native)
+./mill kymora.vfs.jvm.test         # run a module's tests
 ./mill __.compile                  # compile everything
 ```
 
 ```nu
 nu mill.nu resolve __                  # list the module tree
-nu mill.nu kymora.core.jvm.compile     # compile a module (platform: jvm | js | native)
-nu mill.nu kymora.core.jvm.test        # run a module's tests
+nu mill.nu kymora.vfs.jvm.compile      # compile a module (platform: jvm | js | native)
+nu mill.nu kymora.vfs.jvm.test         # run a module's tests
 nu mill.nu __.compile                  # compile everything
 ```
 
@@ -67,11 +67,11 @@ code is usually more accurate and easier to correlate with published artifacts.
   `kymora/<module>/test/src`.
 - `kymora/package.mill.yaml` — the published `kymora` umbrella aggregate.
 
-Current modules: `kymora-core` (`kymora/core`), `kymora-vfs` (`kymora/vfs`,
-depends on `core`), `kymora-workflow` (`kymora/workflow`, depends on
-`core` + `vfs`) and its `kymora-workflow-testkit` (`kymora/workflow-testkit`)
-companion. There is also an unpublished `kymora-examples` (`kymora/examples`,
-JVM-only) carrying runnable reference examples (`smile-build`, `agent-skills`).
+Current modules: `kymora-vfs` (`kymora/vfs`), `kymora-workflow`
+(`kymora/workflow`, depends on `vfs`) and its `kymora-workflow-testkit`
+(`kymora/workflow-testkit`) companion. There is also an unpublished
+`kymora-examples` (`kymora/examples`, JVM-only) carrying runnable reference
+examples (`smile-build`, `agent-skills`).
 
 `kymora-workflow` is the DAG / incremental-execution library; its
 `kymora-workflow-testkit` companion publishes the in-memory cache, fake clock,

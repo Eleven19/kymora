@@ -12,9 +12,8 @@ import kyo.*
   * [[TaskVersion]] (a real case class). `createdAt` is `java.time.Instant`, for which `kyo-schema` ships a built-in
   * `instantSchema`.
   *
-  * The companion supplies an explicit `Schema` given that summons each field schema by name — this sidesteps a macro
-  * limitation in `kyo-schema` 1.0.0-RC2 where `Schema.derived` on a case class containing opaque-type fields can blow
-  * up at runtime with `SchemaNotSerializableException`.
+  * The companion supplies an explicit `Schema` given that summons each field schema by name, keeping opaque-type fields
+  * such as [[Fingerprint]] and [[TaskVersion]] serialized through their companion schemas.
   */
 final case class TaskRecord[A](
     schemaVersion: Int,

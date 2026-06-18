@@ -7,9 +7,9 @@ import mill.scalanativelib.*
 import coursier.maven.MavenRepository
 
 object KymoraVersions:
-    /** Pinned Kyo snapshot. All Kyo modules ship at the same snapshot tag —
+    /** Pinned Kyo release candidate. All Kyo modules ship at the same version —
       * pinned together here. */
-    val Kyo: String = "1.0.0-RC2+139-715dffd7-SNAPSHOT"
+    val Kyo: String = "1.0.0-RC4"
 
     /** Pinned scribe version for cross-platform logging (JVM + JS + Native). */
     val Scribe: String = "3.16.1"

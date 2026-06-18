@@ -4,11 +4,10 @@ import kyo.*
 
 /** Structured event emitted by the engine for observability.
   *
-  * Schema derivation is intentionally NOT attached to the sealed trait — the
-  * kyo-schema 1.0.0-RC2 macro can't auto-derive for case classes with
-  * opaque-type fields (`TaskId`, `Fingerprint`). If a downstream consumer
-  * (e.g. `JsonLinesObserver` in a later task) needs a `Schema[WorkflowEvent]`,
-  * provide it explicitly there.
+  * Schema derivation is intentionally NOT attached to the sealed trait. If a
+  * downstream consumer needs a `Schema[WorkflowEvent]`, provide an explicit
+  * event schema at that boundary so opaque identifiers and fingerprints keep
+  * their stable encodings.
   */
 sealed trait WorkflowEvent derives CanEqual
 

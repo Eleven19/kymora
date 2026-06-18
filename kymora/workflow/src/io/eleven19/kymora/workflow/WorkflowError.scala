@@ -7,16 +7,15 @@ import kyo.*
   *
   * The hierarchy is closed (`sealed trait`) and `CanEqual`-derived for strict
   * equality. `Schema` is derived for round-trip serialization (cache +
-  * observability persistence). The kyo-schema 1.0.0-RC2 macro can derive
-  * automatically because every `TaskId`/`TaskScope` field is backed by an
-  * explicit `given Schema[…]` in the corresponding companion object — see
-  * issue #11.
+  * observability persistence). Every `TaskId`/`TaskScope` field is backed by an
+  * explicit `given Schema[…]` in the corresponding companion object, so the
+  * public error surface keeps stable string encodings.
   *
   * Several variants carry a `Chunk` of items where a non-empty list is the
   * intended invariant (e.g. `DuplicateTaskId.kinds`, `CycleDetected.cycle`,
-  * `Partial.errors`). Kyo 1.0.0-RC2 does not yet ship `NonEmptyChunk`, so the
-  * non-empty contract is documented per field rather than encoded in the type;
-  * constructors that produce these errors must enforce it.
+  * `Partial.errors`). The non-empty contract is documented per field rather
+  * than encoded in the type; constructors that produce these errors must enforce
+  * it.
   */
 sealed trait WorkflowError derives CanEqual, Schema
 object WorkflowError:
