@@ -1,7 +1,8 @@
 # kymora-workflow-testkit
 
 Test helpers for [`kymora-workflow`](../workflow). Published to downstream
-users.
+users for JVM, Scala.js, Scala.js WASM, and Scala Native. WASM tests run on
+Node.js 24+.
 
 ## Why a separate testkit module
 

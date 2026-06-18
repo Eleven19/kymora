@@ -26,14 +26,14 @@ When using Nushell, run Mill through the Nushell launcher: `nu mill.nu <task>`.
 
 ```sh
 ./mill resolve __                  # list the module tree
-./mill kymora.vfs.jvm.compile      # compile a module (platform: jvm | js | native)
+./mill kymora.vfs.jvm.compile      # compile a module (platform: jvm | js | wasm | native)
 ./mill kymora.vfs.jvm.test         # run a module's tests
 ./mill __.compile                  # compile everything
 ```
 
 ```nu
 nu mill.nu resolve __                  # list the module tree
-nu mill.nu kymora.vfs.jvm.compile      # compile a module (platform: jvm | js | native)
+nu mill.nu kymora.vfs.jvm.compile      # compile a module (platform: jvm | js | wasm | native)
 nu mill.nu kymora.vfs.jvm.test         # run a module's tests
 nu mill.nu __.compile                  # compile everything
 ```
@@ -63,7 +63,7 @@ code is usually more accurate and easier to correlate with published artifacts.
     (Scala version, scalac options), and the JS / Wasm / Native module traits.
   - `PublishSupport.scala` — Sonatype Central publishing (`io.eleven19.kymora`).
 - `kymora/<module>/package.mill` — one per module, cross-platform
-  (`jvm` / `js` / `native` objects). Sources in `kymora/<module>/src`, tests in
+  (`jvm` / `js` / `wasm` / `native` objects). Sources in `kymora/<module>/src`, tests in
   `kymora/<module>/test/src`.
 - `kymora/package.mill.yaml` — the published `kymora` umbrella aggregate.
 
@@ -88,16 +88,18 @@ generally useful for testing workflows belongs in the published testkit module.
 - Format with scalafmt (config in `.scalafmt.conf`); `CommonScalaModule` mixes in
   `ScalafmtModule`.
 - Tests use **kyo-test** (Kyo's own framework). Kyo ships no Mill support, so the
-  meta-build provides `KyoTestModule` / `KyoTestJSModule` / `KyoTestNativeModule`
-  (in `Modules.scala`) — they set the per-platform `sbt.testing.Framework` class
-  and pull `kyo-core` + `kyo-test-api` + `kyo-test-runner`. Mix the matching trait
-  into each platform's `test` object. Suites extend `kyo.test.Test[Any]`; import
+  meta-build provides `KyoTestModule` / `KyoTestJSModule` / `KyoTestWasmModule` /
+  `KyoTestNativeModule` (in `Modules.scala`) — they set the per-platform
+  `sbt.testing.Framework` class and pull `kyo-core` + `kyo-test-api` +
+  `kyo-test-runner`. WASM tests require Node 24+. Mix the matching trait into
+  each platform's `test` object. Suites extend `kyo.test.Test[Any]`; import
   `kyo.*` and `kyo.test.*`, write `"name" in { assert(...) }`.
 - Pin shared dependency versions in `KymoraVersions`, not inline in modules.
 
 ### Adding a module
 
 Mirror an existing `kymora/<module>/package.mill` (e.g. `kymora/vfs`): a
-`<Name>Module` trait extending `CommonScalaModule` + `PlatformScalaModule` +
-`PublishSupport`, a test trait, and `jvm` / `js` / `native` objects. Add it to
-the `kymora` aggregate in `kymora/package.mill.yaml` if it should be published.
+`<Name>Module` trait extending `CommonScalaModule`, `KymoraPlatformScalaModule`,
+and `PublishSupport`; a test trait; and `jvm` / `js` / `wasm` / `native`
+objects. Add it to the `kymora` aggregate in `kymora/package.mill.yaml` if it
+should be published.

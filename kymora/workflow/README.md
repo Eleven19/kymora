@@ -5,6 +5,9 @@ caching semantics. A workflow is built from typed `Task[A]` nodes, executed
 through the `Workflow` effect, and backed by a `Workflow.Runtime` that supplies
 VFS access, cache layout, observability, and run configuration.
 
+The module is published for JVM, Scala.js, Scala.js WASM, and Scala Native.
+WASM tests run on Node.js 24+.
+
 See [the design spec](../../docs/superpowers/specs/2026-06-16-kymora-workflow-design.md)
 for the architecture and conventions.
 
@@ -326,6 +329,7 @@ the workflow test suites named in that file.
 ## Hashing
 
 `Fingerprint.ofBytes` is backed by the pure-Scala BLAKE3 implementation in
-`pt.kcry::blake3` — cross-platform across JVM, Scala.js, and Scala Native.
+`pt.kcry::blake3` — cross-platform across JVM, Scala.js, Scala.js WASM, and
+Scala Native.
 Hashes are byte-identical on every platform, so cache manifests written on
 one platform are valid on any other.

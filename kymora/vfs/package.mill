@@ -17,12 +17,24 @@ trait VfsModule extends _root_.build.CommonScalaModule
 
 trait VfsJSModule extends VfsModule with _root_.build.CommonScalaJSModule
 
+trait VfsWasmModule extends VfsModule with _root_.build.CommonScalaJSWasmModule {
+    override def mvnDeps = Seq(
+        mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
+        mvn"com.outr:scribe_sjs1_3:${_root_.build.KymoraVersions.Scribe}"
+    )
+}
+
 object jvm extends VfsModule {
     object test extends ScalaTests with _root_.build.KyoTestModule
 }
 
 object js extends VfsJSModule {
     object test extends ScalaJSTests with _root_.build.KyoTestJSModule
+}
+
+object wasm extends VfsWasmModule {
+    object test extends ScalaJSTests with _root_.build.KyoTestWasmModule
 }
 
 object native extends VfsModule with _root_.build.CommonScalaNativeModule {

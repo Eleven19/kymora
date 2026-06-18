@@ -12,7 +12,7 @@ trait WorkflowModule extends _root_.build.CommonScalaModule
         mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
         mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
         mvn"io.getkyo::kyo-case-app::${_root_.build.KymoraVersions.Kyo}",
-        // Pure-Scala BLAKE3 — cross-platform (JVM / Scala.js / Scala Native)
+        // Pure-Scala BLAKE3 — cross-platform (JVM / Scala.js / Wasm / Scala Native)
         // via `%%%`. Used by the engine's `Fingerprint` primitive so cache
         // manifests are byte-identical across platforms.
         mvn"pt.kcry::blake3::3.1.2"
@@ -37,6 +37,19 @@ object js extends WorkflowModule with _root_.build.CommonScalaJSModule {
     override def moduleDeps = Seq(build.kymora.vfs.js)
     object test extends ScalaJSTests with WorkflowTestModule with _root_.build.KyoTestJSModule {
         override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.js)
+    }
+}
+
+object wasm extends WorkflowModule with _root_.build.CommonScalaJSWasmModule {
+    override def moduleDeps = Seq(build.kymora.vfs.wasm)
+    override def mvnDeps = Seq(
+        mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-case-app::${_root_.build.KymoraVersions.Kyo}",
+        mvn"pt.kcry:blake3_sjs1_3:3.1.2"
+    )
+    object test extends ScalaJSTests with WorkflowTestModule with _root_.build.KyoTestWasmModule {
+        override def moduleDeps = super.moduleDeps ++ Seq(build.kymora.`workflow-testkit`.wasm)
     }
 }
 

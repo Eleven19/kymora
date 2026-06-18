@@ -108,6 +108,39 @@ jobs:
       - name: Run JS tests
         run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-js kymora.vfs.js.test + kymora.workflow.js.test + kymora.workflow-testkit.js.test
 
+  build-wasm:
+    name: Build & Test (Scala.js WASM)
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Setup Mill remote cache
+        uses: actions/cache@v4
+        with:
+          path: .mill-remote-cache
+          key: ${{ runner.os }}-mill-remote-wasm-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-mill-remote-wasm-
+
+      - name: Compile WASM modules
+        run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-wasm kymora.vfs.wasm.compile + kymora.workflow.wasm.compile + kymora.workflow-testkit.wasm.compile
+
+      - name: Run WASM tests
+        run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-wasm kymora.vfs.wasm.test + kymora.workflow.wasm.test + kymora.workflow-testkit.wasm.test
+
   build-native:
     name: Build & Test (Scala Native)
     needs: [build]
