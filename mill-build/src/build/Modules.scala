@@ -11,7 +11,7 @@ object KymoraVersions:
       * pinned together here. */
     val Kyo: String = "1.0.0-RC4"
 
-    /** Pinned scribe version for cross-platform logging (JVM + JS + Native). */
+    /** Pinned scribe version for cross-platform logging (JVM + JS + Native + Wasm). */
     val Scribe: String = "3.16.1"
 
 trait CommonScalaModule extends ScalaModule with scalafmt.ScalafmtModule {
@@ -40,7 +40,7 @@ trait CommonScalaModule extends ScalaModule with scalafmt.ScalafmtModule {
 }
 
 trait KymoraPlatformScalaModule extends PlatformScalaModule {
-  def sharedPlatformCrossSuffixes: Seq[String] = Seq("js", "jvm", "native")
+  def sharedPlatformCrossSuffixes: Seq[String] = Seq("js", "jvm", "native", "wasm")
 
   override def sourcesFolders: Seq[os.SubPath] =
     val platform = platformCrossSuffix
@@ -74,6 +74,7 @@ trait CommonScalaTestModule extends ScalaModule with scalafmt.ScalafmtModule
   * Mix the matching trait into each platform's test object:
   *   object test extends ScalaTests       with KyoTestModule
   *   object test extends ScalaJSTests      with KyoTestJSModule
+  *   object test extends ScalaJSTests      with KyoTestWasmModule
   *   object test extends ScalaNativeTests  with KyoTestNativeModule
   */
 trait KyoTestModule extends TestModule {
@@ -109,6 +110,8 @@ trait KyoTestNativeModule extends KyoTestModule {
   override def testFramework: T[String] = "kyo.test.runner.NativeFramework"
 }
 
+trait KyoTestWasmModule extends KyoTestJSModule
+
 trait CommonScalaJSModule extends ScalaJSModule with scalafmt.ScalafmtModule {
   def scalaJSVersion = "1.21.0"
 
@@ -139,8 +142,20 @@ trait CommonScalaJSModule extends ScalaJSModule with scalafmt.ScalafmtModule {
   */
 trait CommonScalaJSWasmModule extends CommonScalaJSModule {
   override def scalaJSExperimentalUseWebAssembly: T[Boolean] = Task { true }
+  override def platformSuffix: T[String] = s"_sjs${artifactScalaJSVersion()}-wasm"
+  override def scalaLibraryMvnDeps: T[Seq[Dep]] =
+    Task {
+      Seq(mvn"org.scala-lang:scala3-library_sjs1_3:${scalaVersion()}")
+    }
+  override protected def resolvedDepsWarnNonPlatform: T[Boolean] = Task { false }
   override def moduleKind: T[mill.scalajslib.api.ModuleKind] =
     Task { mill.scalajslib.api.ModuleKind.ESModule }
+  override def jsEnvConfig: T[mill.scalajslib.api.JsEnvConfig] =
+    Task {
+      mill.scalajslib.api.JsEnvConfig.NodeJs(
+        args = List("--max_old_space_size=5120", "--experimental-wasm-exnref")
+      )
+    }
 }
 
 trait CommonScalaNativeModule extends ScalaNativeModule with scalafmt.ScalafmtModule {

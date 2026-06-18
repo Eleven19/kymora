@@ -3,7 +3,8 @@
 `kymora-vfs` provides virtual filesystem access as first-class Kyo effects.
 Programs depend on `ReadonlyVfs` when they only inspect files and `Vfs` when
 they mutate files. Callers provide a concrete backend at the edge of the
-program.
+program. The module is published for JVM, Scala.js, Scala.js WASM, and Scala
+Native; WASM tests run on Node.js 24+.
 
 ## Overview
 

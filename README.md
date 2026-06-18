@@ -9,16 +9,21 @@ host-backed, or mounted filesystems.
 ## Modules
 
 - [`kymora-vfs`](kymora/vfs) — Kyo effects for read-only and writable virtual
-  filesystem access over host, in-memory, and mounted backends.
+  filesystem access over host, in-memory, and mounted backends. Published for
+  JVM, Scala.js, Scala.js WASM, and Scala Native.
 - [`kymora-workflow`](kymora/workflow) — Kyo-native DAG task-graph engine with
   Mill-aligned incremental caching. See the
   [design spec](docs/superpowers/specs/2026-06-16-kymora-workflow-design.md).
+  Published for JVM, Scala.js, Scala.js WASM, and Scala Native.
 - [`kymora-workflow-testkit`](kymora/workflow-testkit) — published test helpers for
   `kymora-workflow` (in-memory cache, fake clock, event capture, graph
-  ObjectMothers).
+  ObjectMothers). Published for JVM, Scala.js, Scala.js WASM, and Scala Native.
 - `kymora-examples` (JVM-only, unpublished) — runnable reference examples:
   `smile-build` (Mill-style build DSL) and `agent-skills` (workflow-backed agent
   skill runner).
+
+WASM modules use Scala.js WebAssembly output and require Node.js 24+ for local
+test execution.
 
 ## Quick examples
 
