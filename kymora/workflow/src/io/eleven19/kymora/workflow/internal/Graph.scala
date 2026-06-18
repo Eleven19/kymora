@@ -24,7 +24,7 @@ private[workflow] object Graph:
     * `Task` instances claiming the same `TaskId`) and returns the FIRST such
     * collision as `WorkflowError.DuplicateTaskId`.
     */
-  def collect(goals: Seq[Task[?]]): Either[WorkflowError, Reachable] =
+  def collect(goals: Seq[Task[?]]): Result[WorkflowError, Reachable] =
     val seen  = scala.collection.mutable.LinkedHashMap.empty[TaskId, Task[?]]
     val stack = scala.collection.mutable.Stack.from(goals)
 
@@ -32,7 +32,7 @@ private[workflow] object Graph:
       val t = stack.pop()
       seen.get(t.id) match
         case Some(existing) if !existing.eq(t) =>
-          return Left(WorkflowError.DuplicateTaskId(
+          return Result.fail(WorkflowError.DuplicateTaskId(
             t.id,
             Chunk(kindOf(existing), kindOf(t)),
           ))
@@ -43,16 +43,20 @@ private[workflow] object Graph:
           depsOf(t).foreach(d => { val _ = stack.push(d) })
     end while
 
-    Right(seen.toMap)
+    Result.succeed(seen.toMap)
   end collect
 
-  private def depsOf(t: Task[?]): Seq[Task[?]] = t match
+  private[workflow] def depsOf(t: Task[?]): Seq[Task[?]] = t match
     case c: Task.Cached[?]     => c.deps
     case p: Task.Persistent[?] => p.deps
     case k: Task.Command[?]    => k.deps
     case _: Task.Source        => Nil
     case _: Task.Sources       => Nil
     case _: Task.Input[?]      => Nil
+
+  /** Dependency task ids for `t`, preserving declaration order. */
+  private[workflow] def depIdsOf(t: Task[?]): Chunk[TaskId] =
+    Chunk.from(depsOf(t).map(_.id))
 
   private def kindOf(t: Task[?]): String = t match
     case _: Task.Cached[?]     => "Task.Cached"
