@@ -1,6 +1,7 @@
 package io.eleven19.kymora.vfs
 
 import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 
 import kyo.*
 import kyo.kernel.ContextEffect
@@ -243,6 +244,167 @@ object Vfs:
             createFolders: Boolean = true
         ): Unit < (Sync & Abort[VfsError])
 
+        /** Writes byte chunks from a Kyo stream, replacing any existing file.
+          *
+          * The stream is drained incrementally through [[writeStream]] rather than collected in memory.
+          *
+          * {{{
+          * val bytes = Stream.init(Chunk(Chunk[Byte](1, 2), Chunk[Byte](3, 4)))
+          * Scope.run(vfs.writeBytesStream(VPath.root / "artifact.bin", bytes))
+          * }}}
+          */
+        def writeBytesStream[S](
+            path: VPath,
+            value: Stream[Chunk[Byte], S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = false, createFolders)
+                _      <- value.foreach(handle.writeBytes)
+            yield ()
+
+        /** Appends byte chunks from a Kyo stream to a file. */
+        def appendBytesStream[S](
+            path: VPath,
+            value: Stream[Chunk[Byte], S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = true, createFolders)
+                _      <- value.foreach(handle.writeBytes)
+            yield ()
+
+        /** Writes UTF-8 text fragments from a Kyo stream, replacing any existing file.
+          *
+          * The stream is drained incrementally through [[writeStream]] rather than collected in memory.
+          *
+          * {{{
+          * val logs = Stream.init(Chunk("start\n", "done\n"))
+          * Scope.run(vfs.writeTextStream(VPath.root / "logs" / "build.log", logs))
+          * }}}
+          */
+        def writeTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            writeTextStream(path, value, StandardCharsets.UTF_8, createFolders)
+
+        /** Writes text fragments from a Kyo stream with the provided charset, creating parent folders. */
+        def writeTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            writeTextStream(path, value, charset, createFolders = true)
+
+        /** Writes text fragments from a Kyo stream with the provided charset, replacing any existing file. */
+        def writeTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset,
+            createFolders: Boolean
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = false, createFolders)
+                _      <- value.foreach(chunk => handle.writeString(chunk, charset))
+            yield ()
+
+        /** Appends UTF-8 text fragments from a Kyo stream to a file. */
+        def appendTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            appendTextStream(path, value, StandardCharsets.UTF_8, createFolders)
+
+        /** Appends text fragments from a Kyo stream with the provided charset, creating parent folders. */
+        def appendTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            appendTextStream(path, value, charset, createFolders = true)
+
+        /** Appends text fragments from a Kyo stream with the provided charset to a file. */
+        def appendTextStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset,
+            createFolders: Boolean
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = true, createFolders)
+                _      <- value.foreach(chunk => handle.writeString(chunk, charset))
+            yield ()
+
+        /** Writes UTF-8 lines from a Kyo stream, replacing any existing file.
+          *
+          * Each emitted line is written with a trailing newline, matching [[writeLines]].
+          *
+          * {{{
+          * val report = Stream.init(Chunk("tests=42", "failed=0"))
+          * Scope.run(vfs.writeLinesStream(VPath.root / "reports" / "summary.txt", report))
+          * }}}
+          */
+        def writeLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            writeLinesStream(path, value, StandardCharsets.UTF_8, createFolders)
+
+        /** Writes lines from a Kyo stream with the provided charset, creating parent folders. */
+        def writeLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            writeLinesStream(path, value, charset, createFolders = true)
+
+        /** Writes lines from a Kyo stream with the provided charset, replacing any existing file. */
+        def writeLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset,
+            createFolders: Boolean
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = false, createFolders)
+                _      <- value.foreach(line => handle.writeString(line + "\n", charset))
+            yield ()
+
+        /** Appends UTF-8 lines from a Kyo stream to a file.
+          *
+          * Each emitted line is written with a trailing newline, matching [[appendLines]].
+          */
+        def appendLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            createFolders: Boolean = true
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            appendLinesStream(path, value, StandardCharsets.UTF_8, createFolders)
+
+        /** Appends lines from a Kyo stream with the provided charset, creating parent folders. */
+        def appendLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            appendLinesStream(path, value, charset, createFolders = true)
+
+        /** Appends lines from a Kyo stream with the provided charset to a file. */
+        def appendLinesStream[S](
+            path: VPath,
+            value: Stream[String, S],
+            charset: Charset,
+            createFolders: Boolean
+        )(using Frame): Unit < (Sync & Scope & S & Abort[VfsError]) =
+            for
+                handle <- writeStream(path, append = true, createFolders)
+                _      <- value.foreach(line => handle.writeString(line + "\n", charset))
+            yield ()
+
         /** Truncates or expands a file to the requested size. */
         def truncate(path: VPath, size: VfsSize): Unit < (Sync & Abort[VfsError])
 
@@ -252,8 +414,107 @@ object Vfs:
             timestamp: VfsTimestamp
         ): Unit < (Sync & Abort[VfsError])
 
-        /** Creates a directory. */
+        /** Creates a single directory.
+          *
+          * Use [[mkDirs]] when the parent directories may not exist.
+          */
         def mkDir(path: VPath): Unit < (Sync & Abort[VfsError])
+
+        /** Creates this directory and any missing parents.
+          *
+          * Existing directories are accepted. If an existing path segment is a file or other non-directory entry, the
+          * operation fails with [[VfsError.NotDirectory]].
+          *
+          * {{{
+          * val out = VPath.root / "build" / "classes"
+          * for
+          *     vfs <- Vfs.get
+          *     _   <- vfs.mkDirs(out)
+          * yield out
+          * }}}
+          */
+        def mkDirs(path: VPath)(using Frame): Unit < (Sync & Abort[VfsError]) =
+            def ensureDirectory(existing: VPath): Unit < (Sync & Abort[VfsError]) =
+                stat(existing).flatMap { metadata =>
+                    if metadata.entryType == VfsEntryType.Directory then Sync.defer(())
+                    else Abort.fail(VfsError.NotDirectory(existing))
+                }
+
+            def create(target: VPath): Unit < (Sync & Abort[VfsError]) =
+                exists(target).flatMap { found =>
+                    if found then ensureDirectory(target)
+                    else
+                        target.parent match
+                            case Present(parent) =>
+                                create(parent).andThen {
+                                    Abort.run[VfsError](mkDir(target)).flatMap {
+                                        case Result.Success(_) =>
+                                            Sync.defer(())
+                                        case Result.Failure(_: VfsError.AlreadyExists) =>
+                                            ensureDirectory(target)
+                                        case Result.Failure(error) =>
+                                            Abort.fail(error)
+                                        case Result.Panic(error) =>
+                                            Abort.fail(VfsError.BackendFailure(target, "mkDirs", error))
+                                    }
+                                }
+                            case Absent =>
+                                Abort.run[VfsError](mkDir(target)).flatMap {
+                                    case Result.Success(_) =>
+                                        Sync.defer(())
+                                    case Result.Failure(_: VfsError.AlreadyExists) =>
+                                        ensureDirectory(target)
+                                    case Result.Failure(error) =>
+                                        Abort.fail(error)
+                                    case Result.Panic(error) =>
+                                        Abort.fail(VfsError.BackendFailure(target, "mkDirs", error))
+                                }
+                }
+
+            create(path)
+
+        /** Creates a scoped temporary directory inside this backend.
+          *
+          * The directory is created under `parent`, defaults to `/tmp`, and is removed recursively when the surrounding
+          * [[Scope]] exits.
+          *
+          * {{{
+          * Scope.run:
+          *     for
+          *         vfs <- Vfs.get
+          *         dir <- vfs.tempDir(prefix = "compile-")
+          *         _   <- vfs.write(dir / "output.txt", "ok")
+          *     yield dir
+          * }}}
+          */
+        def tempDir(
+            parent: VPath = VPath.root / "tmp",
+            prefix: String = "kymora-"
+        )(using Frame): VPath < (Sync & Scope & Abort[VfsError]) =
+            if prefix.isEmpty || prefix.contains("/") then
+                Abort.fail(VfsError.InvalidPath(prefix, "tempDir prefix must be a non-empty single path segment"))
+            else
+                def loop(base: Long, attempt: Int): VPath < (Sync & Abort[VfsError]) =
+                    val candidate = parent / s"$prefix$base-$attempt"
+                    Abort.run[VfsError](mkDir(candidate)).flatMap {
+                        case Result.Success(_) =>
+                            Sync.defer(candidate)
+                        case Result.Failure(_: VfsError.AlreadyExists) if attempt < 1024 =>
+                            loop(base, attempt + 1)
+                        case Result.Failure(_: VfsError.AlreadyExists) =>
+                            Abort.fail(VfsError.Unsupported(parent, "tempDir exhausted unique names"))
+                        case Result.Failure(error) =>
+                            Abort.fail(error)
+                        case Result.Panic(error) =>
+                            Abort.fail(VfsError.BackendFailure(candidate, "tempDir", error))
+                    }
+
+                for
+                    timestamp <- VfsTimestamp.now
+                    _         <- mkDirs(parent)
+                    dir       <- loop(timestamp.toEpochMillis, 0)
+                    _         <- Scope.ensure(Abort.run(removeAll(dir))).unit
+                yield dir
 
         /** Creates an empty file. */
         def mkFile(path: VPath): Unit < (Sync & Abort[VfsError])
@@ -286,7 +547,8 @@ object Vfs:
 
         /** Opens a scoped write handle for streaming writes.
           *
-          * The returned handle is valid only within the surrounding `Scope`.
+          * The returned handle is valid only within the surrounding `Scope`. Use `writeBytesStream`, `writeTextStream`,
+          * or `writeLinesStream` when an existing Kyo stream should be drained directly to a file.
           */
         def writeStream(
             path: VPath,
@@ -304,6 +566,22 @@ object Vfs:
         ReadonlyVfs.run(vfs.asReadonly) {
             ContextEffect.handle(Tag[Vfs], vfs)(value)
         }
+
+    /** A scoped host-backed temporary VFS and its virtual root. */
+    final case class TempDir(vfs: Vfs.Backend, root: VPath)
+
+    /** Creates a scoped temporary directory inside the active [[Vfs]].
+      *
+      * The returned directory is removed recursively when the surrounding [[Scope]] exits.
+      */
+    def tempDir(
+        parent: VPath = VPath.root / "tmp",
+        prefix: String = "kymora-"
+    )(using Frame): VPath < (Sync & Scope & Vfs & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            dir <- vfs.tempDir(parent, prefix)
+        yield dir
 
     /** Scoped destination for streaming writes. */
     trait WriteHandle:
@@ -336,6 +614,33 @@ object Vfs:
           */
         def init(root: Path)(using Frame): Backend < Sync =
             _root_.io.eleven19.kymora.vfs.internal.HostVfs.init(root)
+
+        /** Creates a scoped host-backed temporary VFS.
+          *
+          * The host directory is removed by Kyo when the surrounding [[Scope]] exits. The returned backend exposes that
+          * host directory as virtual [[VPath.root]].
+          *
+          * {{{
+          * Scope.run:
+          *     for
+          *         temp <- Vfs.host.tempDir()
+          *         _    <- temp.vfs.write(temp.root / "scratch.txt", "ok")
+          *     yield temp.root
+          * }}}
+          */
+        def tempDir(
+            prefix: String = "kymora-vfs-"
+        )(using Frame): TempDir < (Sync & Scope & Abort[VfsError]) =
+            if prefix.isEmpty || prefix.contains("/") then
+                Abort.fail(VfsError.InvalidPath(prefix, "tempDir prefix must be a non-empty single path segment"))
+            else
+                Abort.recover[FileFsException](error =>
+                    Abort.fail[VfsError](VfsError.BackendFailure(VPath.root, "host.tempDir", error))
+                ):
+                    for
+                        root <- Path.tempDir(prefix)
+                        vfs  <- init(root)
+                    yield TempDir(vfs, VPath.root)
 
     /** Mounted filesystem constructors. */
     object mounted:
@@ -482,6 +787,72 @@ extension (path: VPath)
             _   <- vfs.writeLines(path, value, createFolders)
         yield ()
 
+    /** Writes byte chunks from a Kyo stream to this path using [[Vfs]]. */
+    def writeBytesStream[S](
+        value: Stream[Chunk[Byte], S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeBytesStream(path, value, createFolders)
+        yield ()
+
+    /** Writes UTF-8 text fragments from a Kyo stream to this path using [[Vfs]]. */
+    def writeTextStream[S](
+        value: Stream[String, S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeTextStream(path, value, createFolders)
+        yield ()
+
+    /** Writes text fragments from a Kyo stream to this path using [[Vfs]]. */
+    def writeTextStream[S](
+        value: Stream[String, S],
+        charset: Charset
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        writeTextStream(value, charset, createFolders = true)
+
+    /** Writes text fragments from a Kyo stream to this path using [[Vfs]], optionally creating parents. */
+    def writeTextStream[S](
+        value: Stream[String, S],
+        charset: Charset,
+        createFolders: Boolean
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeTextStream(path, value, charset, createFolders)
+        yield ()
+
+    /** Writes UTF-8 lines from a Kyo stream to this path using [[Vfs]]. */
+    def writeLinesStream[S](
+        value: Stream[String, S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeLinesStream(path, value, createFolders)
+        yield ()
+
+    /** Writes lines from a Kyo stream to this path using [[Vfs]]. */
+    def writeLinesStream[S](
+        value: Stream[String, S],
+        charset: Charset
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        writeLinesStream(value, charset, createFolders = true)
+
+    /** Writes lines from a Kyo stream to this path using [[Vfs]], optionally creating parents. */
+    def writeLinesStream[S](
+        value: Stream[String, S],
+        charset: Charset,
+        createFolders: Boolean
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.writeLinesStream(path, value, charset, createFolders)
+        yield ()
+
     /** Appends UTF-8 text to this path using [[Vfs]]. */
     def append(
         value: String,
@@ -530,12 +901,92 @@ extension (path: VPath)
             _   <- vfs.appendLines(path, value, createFolders)
         yield ()
 
+    /** Appends byte chunks from a Kyo stream to this path using [[Vfs]]. */
+    def appendBytesStream[S](
+        value: Stream[Chunk[Byte], S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendBytesStream(path, value, createFolders)
+        yield ()
+
+    /** Appends UTF-8 text fragments from a Kyo stream to this path using [[Vfs]]. */
+    def appendTextStream[S](
+        value: Stream[String, S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendTextStream(path, value, createFolders)
+        yield ()
+
+    /** Appends text fragments from a Kyo stream to this path using [[Vfs]]. */
+    def appendTextStream[S](
+        value: Stream[String, S],
+        charset: Charset
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        appendTextStream(value, charset, createFolders = true)
+
+    /** Appends text fragments from a Kyo stream to this path using [[Vfs]], optionally creating parents. */
+    def appendTextStream[S](
+        value: Stream[String, S],
+        charset: Charset,
+        createFolders: Boolean
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendTextStream(path, value, charset, createFolders)
+        yield ()
+
+    /** Appends UTF-8 lines from a Kyo stream to this path using [[Vfs]]. */
+    def appendLinesStream[S](
+        value: Stream[String, S],
+        createFolders: Boolean = true
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendLinesStream(path, value, createFolders)
+        yield ()
+
+    /** Appends lines from a Kyo stream to this path using [[Vfs]]. */
+    def appendLinesStream[S](
+        value: Stream[String, S],
+        charset: Charset
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        appendLinesStream(value, charset, createFolders = true)
+
+    /** Appends lines from a Kyo stream to this path using [[Vfs]], optionally creating parents. */
+    def appendLinesStream[S](
+        value: Stream[String, S],
+        charset: Charset,
+        createFolders: Boolean
+    )(using Frame): Unit < (Sync & Scope & Vfs & S & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.appendLinesStream(path, value, charset, createFolders)
+        yield ()
+
     /** Creates this path as a directory using [[Vfs]]. */
     def mkDir(using Frame): Unit < (Sync & Vfs & Abort[VfsError]) =
         for
             vfs <- Vfs.get
             _   <- vfs.mkDir(path)
         yield ()
+
+    /** Creates this path and any missing parents as directories using [[Vfs]]. */
+    def mkDirs(using Frame): Unit < (Sync & Vfs & Abort[VfsError]) =
+        for
+            vfs <- Vfs.get
+            _   <- vfs.mkDirs(path)
+        yield ()
+
+    /** Creates a scoped temporary directory under this path using [[Vfs]].
+      *
+      * The returned directory is removed recursively when the surrounding [[Scope]] exits.
+      */
+    def tempDir(prefix: String = "kymora-")(using Frame): VPath < (Sync & Scope & Vfs & Abort[VfsError]) =
+        Vfs.tempDir(parent = path, prefix = prefix)
 
     /** Removes this path recursively using [[Vfs]]. */
     def removeAll(using Frame): Unit < (Sync & Vfs & Abort[VfsError]) =

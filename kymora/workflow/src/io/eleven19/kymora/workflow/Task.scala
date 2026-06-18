@@ -390,6 +390,105 @@ object Task:
     ): Task[A] =
         cached[A, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(value)
 
+    // 7 deps
+    inline def cached[A, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(value: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using
+        scope: TaskScope,
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): Task[A] =
+        new Cached[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4, d5, d6, d7),
+            (_, args) =>
+                value(
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7]
+                ),
+            cacheable,
+            hashable
+        )
+
+    // 7 deps (default version)
+    inline def cached[A, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(value: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using
+        scope: TaskScope,
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): Task[A] =
+        cached[A, D1, D2, D3, D4, D5, D6, D7](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7)(value)
+
+    // 8 deps
+    inline def cached[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(value: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using
+        scope: TaskScope,
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): Task[A] =
+        new Cached[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4, d5, d6, d7, d8),
+            (_, args) =>
+                value(
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7],
+                    args(7).asInstanceOf[D8]
+                ),
+            cacheable,
+            hashable
+        )
+
+    // 8 deps (default version)
+    inline def cached[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(value: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using
+        scope: TaskScope,
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): Task[A] =
+        cached[A, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(value)
+
     // ─────────────────────── init (alias for cached) ────────────────────────
     //
     // Kept for Kyo-convention compatibility. Prefer [[cached]] for new code
@@ -535,14 +634,78 @@ object Task:
     ): Task[A] =
         cached[A, D1, D2, D3, D4, D5, D6](id)(d1, d2, d3, d4, d5, d6)(body)
 
+    /** Alias for [[cached]] (7 deps). */
+    inline def init[A, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(body: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using
+        scope: TaskScope,
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): Task[A] =
+        cached[A, D1, D2, D3, D4, D5, D6, D7](id, version)(d1, d2, d3, d4, d5, d6, d7)(body)
+
+    /** Alias for [[cached]] (7 deps, default version). */
+    inline def init[A, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(body: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using
+        scope: TaskScope,
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): Task[A] =
+        cached[A, D1, D2, D3, D4, D5, D6, D7](id)(d1, d2, d3, d4, d5, d6, d7)(body)
+
+    /** Alias for [[cached]] (8 deps). */
+    inline def init[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(body: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using
+        scope: TaskScope,
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): Task[A] =
+        cached[A, D1, D2, D3, D4, D5, D6, D7, D8](id, version)(d1, d2, d3, d4, d5, d6, d7, d8)(body)
+
+    /** Alias for [[cached]] (8 deps, default version). */
+    inline def init[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(body: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using
+        scope: TaskScope,
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): Task[A] =
+        cached[A, D1, D2, D3, D4, D5, D6, D7, D8](id)(d1, d2, d3, d4, d5, d6, d7, d8)(body)
+
     // ──────────────────── parameterized cached (P joins cache key) ─────────────
     //
     // `Task.cached[A, P]` returns a `P => Task[A]`. The returned function builds
     // a new `Task.Cached[A]` whose `paramHash` is derived from the supplied
     // `Hashable[P]`, so different `P` values produce distinct cache entries
-    // against the same `TaskId`. We cap dep arities at 3 for parameterized
-    // variants to keep the surface manageable; users needing more can join deps
-    // through an intermediate Cached task.
+    // against the same `TaskId`.
 
     /** Parameterized [[Cached]] (leaf). The returned `P => Task[A]` produces a Cached task whose `paramHash` is folded
       * into its `inputsHash`.
@@ -690,6 +853,266 @@ object Task:
     ): P => Task[A] =
         cached[A, P, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(value)
 
+    /** Parameterized [[Cached]] with 4 deps. */
+    inline def cached[A, P, D1, D2, D3, D4](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(value: (P, D1, D2, D3, D4) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            val ph = hp.hash(p)
+            new Cached[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4),
+                (_, args) =>
+                    value(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4]
+                    ),
+                cacheable,
+                hashable,
+                Maybe(ph)
+            )
+
+    /** Parameterized [[Cached]] with 4 deps (default version). */
+    inline def cached[A, P, D1, D2, D3, D4](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(value: (P, D1, D2, D3, D4) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        cached[A, P, D1, D2, D3, D4](id, TaskVersion.v1)(d1, d2, d3, d4)(value)
+
+    /** Parameterized [[Cached]] with 5 deps. */
+    inline def cached[A, P, D1, D2, D3, D4, D5](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(value: (P, D1, D2, D3, D4, D5) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            val ph = hp.hash(p)
+            new Cached[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4, d5),
+                (_, args) =>
+                    value(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4],
+                        args(4).asInstanceOf[D5]
+                    ),
+                cacheable,
+                hashable,
+                Maybe(ph)
+            )
+
+    /** Parameterized [[Cached]] with 5 deps (default version). */
+    inline def cached[A, P, D1, D2, D3, D4, D5](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(value: (P, D1, D2, D3, D4, D5) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        cached[A, P, D1, D2, D3, D4, D5](id, TaskVersion.v1)(d1, d2, d3, d4, d5)(value)
+
+    /** Parameterized [[Cached]] with 6 deps. */
+    inline def cached[A, P, D1, D2, D3, D4, D5, D6](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(value: (P, D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            val ph = hp.hash(p)
+            new Cached[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4, d5, d6),
+                (_, args) =>
+                    value(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4],
+                        args(4).asInstanceOf[D5],
+                        args(5).asInstanceOf[D6]
+                    ),
+                cacheable,
+                hashable,
+                Maybe(ph)
+            )
+
+    /** Parameterized [[Cached]] with 6 deps (default version). */
+    inline def cached[A, P, D1, D2, D3, D4, D5, D6](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(value: (P, D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        cached[A, P, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(value)
+
+    /** Parameterized [[Cached]] with 7 deps. */
+    inline def cached[A, P, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(value: (P, D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            val ph = hp.hash(p)
+            new Cached[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4, d5, d6, d7),
+                (_, args) =>
+                    value(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4],
+                        args(4).asInstanceOf[D5],
+                        args(5).asInstanceOf[D6],
+                        args(6).asInstanceOf[D7]
+                    ),
+                cacheable,
+                hashable,
+                Maybe(ph)
+            )
+
+    /** Parameterized [[Cached]] with 7 deps (default version). */
+    inline def cached[A, P, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(value: (P, D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        cached[A, P, D1, D2, D3, D4, D5, D6, D7](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7)(value)
+
+    /** Parameterized [[Cached]] with 8 deps. */
+    inline def cached[A, P, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(value: (P, D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            val ph = hp.hash(p)
+            new Cached[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4, d5, d6, d7, d8),
+                (_, args) =>
+                    value(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4],
+                        args(4).asInstanceOf[D5],
+                        args(5).asInstanceOf[D6],
+                        args(6).asInstanceOf[D7],
+                        args(7).asInstanceOf[D8]
+                    ),
+                cacheable,
+                hashable,
+                Maybe(ph)
+            )
+
+    /** Parameterized [[Cached]] with 8 deps (default version). */
+    inline def cached[A, P, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(value: (P, D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        cached[A, P, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(value)
+
     /** Same caching contract as Cached, but the .dest/ directory is preserved across rebuilds. On cache hits the stored
       * value is decoded; on misses the value expression runs with access to the previous .dest contents.
       */
@@ -831,6 +1254,91 @@ object Task:
     )(using scope: TaskScope, cacheable: Cacheable[A], hashable: Hashable[A]): Task[A] =
         persistent[A, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(value)
 
+    inline def persistent[A, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(
+        value: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects
+    )(using scope: TaskScope, cacheable: Cacheable[A], hashable: Hashable[A]): Task[A] =
+        persistentTask[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4, d5, d6, d7),
+            Maybe.empty
+        )((_, args) =>
+            value(
+                args(0).asInstanceOf[D1],
+                args(1).asInstanceOf[D2],
+                args(2).asInstanceOf[D3],
+                args(3).asInstanceOf[D4],
+                args(4).asInstanceOf[D5],
+                args(5).asInstanceOf[D6],
+                args(6).asInstanceOf[D7]
+            )
+        )
+
+    inline def persistent[A, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(
+        value: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects
+    )(using scope: TaskScope, cacheable: Cacheable[A], hashable: Hashable[A]): Task[A] =
+        persistent[A, D1, D2, D3, D4, D5, D6, D7](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7)(value)
+
+    inline def persistent[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(
+        value: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects
+    )(using scope: TaskScope, cacheable: Cacheable[A], hashable: Hashable[A]): Task[A] =
+        persistentTask[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4, d5, d6, d7, d8),
+            Maybe.empty
+        )((_, args) =>
+            value(
+                args(0).asInstanceOf[D1],
+                args(1).asInstanceOf[D2],
+                args(2).asInstanceOf[D3],
+                args(3).asInstanceOf[D4],
+                args(4).asInstanceOf[D5],
+                args(5).asInstanceOf[D6],
+                args(6).asInstanceOf[D7],
+                args(7).asInstanceOf[D8]
+            )
+        )
+
+    inline def persistent[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(
+        value: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects
+    )(using scope: TaskScope, cacheable: Cacheable[A], hashable: Hashable[A]): Task[A] =
+        persistent[A, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(value)
+
     inline def persistent[A, P](inline id: String, version: TaskVersion)(
         value: P => A < BodyEffects
     )(using scope: TaskScope, hp: Hashable[P], cacheable: Cacheable[A], hashable: Hashable[A]): P => Task[A] =
@@ -886,6 +1394,216 @@ object Task:
         value: (P, D1, D2, D3) => A < BodyEffects
     )(using scope: TaskScope, hp: Hashable[P], cacheable: Cacheable[A], hashable: Hashable[A]): P => Task[A] =
         persistent[A, P, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(value)
+
+    inline def persistent[A, P, D1, D2, D3, D4](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(value: (P, D1, D2, D3, D4) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            persistentTask[A](taskId, version, Seq(d1, d2, d3, d4), Maybe(hp.hash(p)))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4]
+                )
+            )
+
+    inline def persistent[A, P, D1, D2, D3, D4](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(value: (P, D1, D2, D3, D4) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        persistent[A, P, D1, D2, D3, D4](id, TaskVersion.v1)(d1, d2, d3, d4)(value)
+
+    inline def persistent[A, P, D1, D2, D3, D4, D5](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(value: (P, D1, D2, D3, D4, D5) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            persistentTask[A](taskId, version, Seq(d1, d2, d3, d4, d5), Maybe(hp.hash(p)))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5]
+                )
+            )
+
+    inline def persistent[A, P, D1, D2, D3, D4, D5](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(value: (P, D1, D2, D3, D4, D5) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        persistent[A, P, D1, D2, D3, D4, D5](id, TaskVersion.v1)(d1, d2, d3, d4, d5)(value)
+
+    inline def persistent[A, P, D1, D2, D3, D4, D5, D6](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(value: (P, D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            persistentTask[A](taskId, version, Seq(d1, d2, d3, d4, d5, d6), Maybe(hp.hash(p)))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6]
+                )
+            )
+
+    inline def persistent[A, P, D1, D2, D3, D4, D5, D6](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(value: (P, D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        persistent[A, P, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(value)
+
+    inline def persistent[A, P, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(value: (P, D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            persistentTask[A](taskId, version, Seq(d1, d2, d3, d4, d5, d6, d7), Maybe(hp.hash(p)))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7]
+                )
+            )
+
+    inline def persistent[A, P, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(value: (P, D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        persistent[A, P, D1, D2, D3, D4, D5, D6, D7](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7)(value)
+
+    inline def persistent[A, P, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(value: (P, D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            persistentTask[A](taskId, version, Seq(d1, d2, d3, d4, d5, d6, d7, d8), Maybe(hp.hash(p)))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7],
+                    args(7).asInstanceOf[D8]
+                )
+            )
+
+    inline def persistent[A, P, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(value: (P, D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using
+        scope: TaskScope,
+        hp: Hashable[P],
+        cacheable: Cacheable[A],
+        hashable: Hashable[A]
+    ): P => Task[A] =
+        persistent[A, P, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(value)
 
     /** Non-cached graph-internal work. Activity values always evaluate once per workflow execution, never read/write
       * cache records, and still produce a meaningful value hash for cached dependents.
@@ -947,6 +1665,176 @@ object Task:
     )(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
         activity[A, D1, D2](id, TaskVersion.v1)(d1, d2)(value)
 
+    inline def activity[A, D1, D2, D3](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3]
+    )(value: (D1, D2, D3) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activityTask[A](TaskId.unsafe(scope.qualify(id).value), version, Seq(d1, d2, d3))((_, args) =>
+            value(args(0).asInstanceOf[D1], args(1).asInstanceOf[D2], args(2).asInstanceOf[D3])
+        )
+
+    inline def activity[A, D1, D2, D3](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3]
+    )(value: (D1, D2, D3) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activity[A, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(value)
+
+    inline def activity[A, D1, D2, D3, D4](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(value: (D1, D2, D3, D4) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activityTask[A](TaskId.unsafe(scope.qualify(id).value), version, Seq(d1, d2, d3, d4))((_, args) =>
+            value(
+                args(0).asInstanceOf[D1],
+                args(1).asInstanceOf[D2],
+                args(2).asInstanceOf[D3],
+                args(3).asInstanceOf[D4]
+            )
+        )
+
+    inline def activity[A, D1, D2, D3, D4](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(value: (D1, D2, D3, D4) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activity[A, D1, D2, D3, D4](id, TaskVersion.v1)(d1, d2, d3, d4)(value)
+
+    inline def activity[A, D1, D2, D3, D4, D5](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(value: (D1, D2, D3, D4, D5) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activityTask[A](TaskId.unsafe(scope.qualify(id).value), version, Seq(d1, d2, d3, d4, d5))((_, args) =>
+            value(
+                args(0).asInstanceOf[D1],
+                args(1).asInstanceOf[D2],
+                args(2).asInstanceOf[D3],
+                args(3).asInstanceOf[D4],
+                args(4).asInstanceOf[D5]
+            )
+        )
+
+    inline def activity[A, D1, D2, D3, D4, D5](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(value: (D1, D2, D3, D4, D5) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activity[A, D1, D2, D3, D4, D5](id, TaskVersion.v1)(d1, d2, d3, d4, d5)(value)
+
+    inline def activity[A, D1, D2, D3, D4, D5, D6](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(value: (D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activityTask[A](TaskId.unsafe(scope.qualify(id).value), version, Seq(d1, d2, d3, d4, d5, d6))((_, args) =>
+            value(
+                args(0).asInstanceOf[D1],
+                args(1).asInstanceOf[D2],
+                args(2).asInstanceOf[D3],
+                args(3).asInstanceOf[D4],
+                args(4).asInstanceOf[D5],
+                args(5).asInstanceOf[D6]
+            )
+        )
+
+    inline def activity[A, D1, D2, D3, D4, D5, D6](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(value: (D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activity[A, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(value)
+
+    inline def activity[A, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(
+        value: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activityTask[A](TaskId.unsafe(scope.qualify(id).value), version, Seq(d1, d2, d3, d4, d5, d6, d7))((_, args) =>
+            value(
+                args(0).asInstanceOf[D1],
+                args(1).asInstanceOf[D2],
+                args(2).asInstanceOf[D3],
+                args(3).asInstanceOf[D4],
+                args(4).asInstanceOf[D5],
+                args(5).asInstanceOf[D6],
+                args(6).asInstanceOf[D7]
+            )
+        )
+
+    inline def activity[A, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(
+        value: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activity[A, D1, D2, D3, D4, D5, D6, D7](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7)(value)
+
+    inline def activity[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(
+        value: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activityTask[A](TaskId.unsafe(scope.qualify(id).value), version, Seq(d1, d2, d3, d4, d5, d6, d7, d8))(
+            (_, args) =>
+                value(
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7],
+                    args(7).asInstanceOf[D8]
+                )
+        )
+
+    inline def activity[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(
+        value: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): Activity[A] =
+        activity[A, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(value)
+
     inline def activity[A, P](inline id: String, version: TaskVersion)(
         value: P => A < BodyEffects
     )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
@@ -982,6 +1870,200 @@ object Task:
         value: (P, D1, D2) => A < BodyEffects
     )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
         activity[A, P, D1, D2](id, TaskVersion.v1)(d1, d2)(value)
+
+    inline def activity[A, P, D1, D2, D3](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3]
+    )(value: (P, D1, D2, D3) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            activityTask[A](taskId, version, Seq(d1, d2, d3))((_, args) =>
+                value(p, args(0).asInstanceOf[D1], args(1).asInstanceOf[D2], args(2).asInstanceOf[D3])
+            )
+
+    inline def activity[A, P, D1, D2, D3](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3]
+    )(value: (P, D1, D2, D3) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        activity[A, P, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(value)
+
+    inline def activity[A, P, D1, D2, D3, D4](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(value: (P, D1, D2, D3, D4) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            activityTask[A](taskId, version, Seq(d1, d2, d3, d4))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4]
+                )
+            )
+
+    inline def activity[A, P, D1, D2, D3, D4](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(value: (P, D1, D2, D3, D4) => A < BodyEffects)(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        activity[A, P, D1, D2, D3, D4](id, TaskVersion.v1)(d1, d2, d3, d4)(value)
+
+    inline def activity[A, P, D1, D2, D3, D4, D5](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(
+        value: (P, D1, D2, D3, D4, D5) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            activityTask[A](taskId, version, Seq(d1, d2, d3, d4, d5))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5]
+                )
+            )
+
+    inline def activity[A, P, D1, D2, D3, D4, D5](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(
+        value: (P, D1, D2, D3, D4, D5) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        activity[A, P, D1, D2, D3, D4, D5](id, TaskVersion.v1)(d1, d2, d3, d4, d5)(value)
+
+    inline def activity[A, P, D1, D2, D3, D4, D5, D6](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(
+        value: (P, D1, D2, D3, D4, D5, D6) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            activityTask[A](taskId, version, Seq(d1, d2, d3, d4, d5, d6))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6]
+                )
+            )
+
+    inline def activity[A, P, D1, D2, D3, D4, D5, D6](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(
+        value: (P, D1, D2, D3, D4, D5, D6) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        activity[A, P, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(value)
+
+    inline def activity[A, P, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(
+        value: (P, D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            activityTask[A](taskId, version, Seq(d1, d2, d3, d4, d5, d6, d7))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7]
+                )
+            )
+
+    inline def activity[A, P, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(
+        value: (P, D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        activity[A, P, D1, D2, D3, D4, D5, D6, D7](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7)(value)
+
+    inline def activity[A, P, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(
+        value: (P, D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            activityTask[A](taskId, version, Seq(d1, d2, d3, d4, d5, d6, d7, d8))((_, args) =>
+                value(
+                    p,
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7],
+                    args(7).asInstanceOf[D8]
+                )
+            )
+
+    inline def activity[A, P, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(
+        value: (P, D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects
+    )(using scope: TaskScope, hashable: Hashable[A]): P => Activity[A] =
+        activity[A, P, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(value)
 
     /** Command kind: always runs (no memoization of own output). Deps still memoize normally.
       *
@@ -1055,6 +2137,202 @@ object Task:
     )(body: (D1, D2) => A < BodyEffects)(using scope: TaskScope): Command[A] =
         command[A, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
 
+    // 3 deps
+    inline def command[A, D1, D2, D3](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3]
+    )(body: (D1, D2, D3) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        new Command[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3),
+            (_, args) => body(args(0).asInstanceOf[D1], args(1).asInstanceOf[D2], args(2).asInstanceOf[D3])
+        )
+
+    // 3 deps (default version)
+    inline def command[A, D1, D2, D3](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3]
+    )(body: (D1, D2, D3) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        command[A, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(body)
+
+    // 4 deps
+    inline def command[A, D1, D2, D3, D4](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(body: (D1, D2, D3, D4) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        new Command[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4),
+            (_, args) =>
+                body(
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4]
+                )
+        )
+
+    // 4 deps (default version)
+    inline def command[A, D1, D2, D3, D4](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(body: (D1, D2, D3, D4) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        command[A, D1, D2, D3, D4](id, TaskVersion.v1)(d1, d2, d3, d4)(body)
+
+    // 5 deps
+    inline def command[A, D1, D2, D3, D4, D5](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(body: (D1, D2, D3, D4, D5) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        new Command[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4, d5),
+            (_, args) =>
+                body(
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5]
+                )
+        )
+
+    // 5 deps (default version)
+    inline def command[A, D1, D2, D3, D4, D5](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(body: (D1, D2, D3, D4, D5) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        command[A, D1, D2, D3, D4, D5](id, TaskVersion.v1)(d1, d2, d3, d4, d5)(body)
+
+    // 6 deps
+    inline def command[A, D1, D2, D3, D4, D5, D6](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(body: (D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        new Command[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4, d5, d6),
+            (_, args) =>
+                body(
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6]
+                )
+        )
+
+    // 6 deps (default version)
+    inline def command[A, D1, D2, D3, D4, D5, D6](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(body: (D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        command[A, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(body)
+
+    // 7 deps
+    inline def command[A, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(body: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        new Command[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4, d5, d6, d7),
+            (_, args) =>
+                body(
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7]
+                )
+        )
+
+    // 7 deps (default version)
+    inline def command[A, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(body: (D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        command[A, D1, D2, D3, D4, D5, D6, D7](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7)(body)
+
+    // 8 deps
+    inline def command[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(body: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        new Command[A](
+            TaskId.unsafe(scope.qualify(id).value),
+            version,
+            Seq(d1, d2, d3, d4, d5, d6, d7, d8),
+            (_, args) =>
+                body(
+                    args(0).asInstanceOf[D1],
+                    args(1).asInstanceOf[D2],
+                    args(2).asInstanceOf[D3],
+                    args(3).asInstanceOf[D4],
+                    args(4).asInstanceOf[D5],
+                    args(5).asInstanceOf[D6],
+                    args(6).asInstanceOf[D7],
+                    args(7).asInstanceOf[D8]
+                )
+        )
+
+    // 8 deps (default version)
+    inline def command[A, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(body: (D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using scope: TaskScope): Command[A] =
+        command[A, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(body)
+
     // ─────────────── parameterized command (P does NOT need Hashable) ──────────
     //
     // Commands never consult or populate the cache, so the parameterized
@@ -1126,4 +2404,217 @@ object Task:
         scope: TaskScope
     ): P => Command[A] =
         command[A, P, D1, D2](id, TaskVersion.v1)(d1, d2)(body)
+
+    /** Parameterized [[Command]] with 3 deps. */
+    inline def command[A, P, D1, D2, D3](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3]
+    )(body: (P, D1, D2, D3) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            new Command[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3),
+                (_, args) => body(p, args(0).asInstanceOf[D1], args(1).asInstanceOf[D2], args(2).asInstanceOf[D3])
+            )
+
+    /** Parameterized [[Command]] with 3 deps (default version). */
+    inline def command[A, P, D1, D2, D3](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3]
+    )(body: (P, D1, D2, D3) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        command[A, P, D1, D2, D3](id, TaskVersion.v1)(d1, d2, d3)(body)
+
+    /** Parameterized [[Command]] with 4 deps. */
+    inline def command[A, P, D1, D2, D3, D4](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(body: (P, D1, D2, D3, D4) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            new Command[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4),
+                (_, args) =>
+                    body(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4]
+                    )
+            )
+
+    /** Parameterized [[Command]] with 4 deps (default version). */
+    inline def command[A, P, D1, D2, D3, D4](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4]
+    )(body: (P, D1, D2, D3, D4) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        command[A, P, D1, D2, D3, D4](id, TaskVersion.v1)(d1, d2, d3, d4)(body)
+
+    /** Parameterized [[Command]] with 5 deps. */
+    inline def command[A, P, D1, D2, D3, D4, D5](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(body: (P, D1, D2, D3, D4, D5) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            new Command[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4, d5),
+                (_, args) =>
+                    body(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4],
+                        args(4).asInstanceOf[D5]
+                    )
+            )
+
+    /** Parameterized [[Command]] with 5 deps (default version). */
+    inline def command[A, P, D1, D2, D3, D4, D5](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5]
+    )(body: (P, D1, D2, D3, D4, D5) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        command[A, P, D1, D2, D3, D4, D5](id, TaskVersion.v1)(d1, d2, d3, d4, d5)(body)
+
+    /** Parameterized [[Command]] with 6 deps. */
+    inline def command[A, P, D1, D2, D3, D4, D5, D6](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(body: (P, D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            new Command[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4, d5, d6),
+                (_, args) =>
+                    body(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4],
+                        args(4).asInstanceOf[D5],
+                        args(5).asInstanceOf[D6]
+                    )
+            )
+
+    /** Parameterized [[Command]] with 6 deps (default version). */
+    inline def command[A, P, D1, D2, D3, D4, D5, D6](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6]
+    )(body: (P, D1, D2, D3, D4, D5, D6) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        command[A, P, D1, D2, D3, D4, D5, D6](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6)(body)
+
+    /** Parameterized [[Command]] with 7 deps. */
+    inline def command[A, P, D1, D2, D3, D4, D5, D6, D7](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(body: (P, D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            new Command[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4, d5, d6, d7),
+                (_, args) =>
+                    body(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4],
+                        args(4).asInstanceOf[D5],
+                        args(5).asInstanceOf[D6],
+                        args(6).asInstanceOf[D7]
+                    )
+            )
+
+    /** Parameterized [[Command]] with 7 deps (default version). */
+    inline def command[A, P, D1, D2, D3, D4, D5, D6, D7](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7]
+    )(body: (P, D1, D2, D3, D4, D5, D6, D7) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        command[A, P, D1, D2, D3, D4, D5, D6, D7](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7)(body)
+
+    /** Parameterized [[Command]] with 8 deps. */
+    inline def command[A, P, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String, version: TaskVersion)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(body: (P, D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        val taskId = TaskId.unsafe(scope.qualify(id).value)
+        (p: P) =>
+            new Command[A](
+                taskId,
+                version,
+                Seq(d1, d2, d3, d4, d5, d6, d7, d8),
+                (_, args) =>
+                    body(
+                        p,
+                        args(0).asInstanceOf[D1],
+                        args(1).asInstanceOf[D2],
+                        args(2).asInstanceOf[D3],
+                        args(3).asInstanceOf[D4],
+                        args(4).asInstanceOf[D5],
+                        args(5).asInstanceOf[D6],
+                        args(6).asInstanceOf[D7],
+                        args(7).asInstanceOf[D8]
+                    )
+            )
+
+    /** Parameterized [[Command]] with 8 deps (default version). */
+    inline def command[A, P, D1, D2, D3, D4, D5, D6, D7, D8](inline id: String)(
+        d1: Task[D1],
+        d2: Task[D2],
+        d3: Task[D3],
+        d4: Task[D4],
+        d5: Task[D5],
+        d6: Task[D6],
+        d7: Task[D7],
+        d8: Task[D8]
+    )(body: (P, D1, D2, D3, D4, D5, D6, D7, D8) => A < BodyEffects)(using scope: TaskScope): P => Command[A] =
+        command[A, P, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(body)
 end Task

@@ -65,7 +65,7 @@ private[workflow] final case class CacheLayout(root: VPath):
     recover(path):
       for
         _ <- vfs.removeAll(path)
-        _ <- vfs.mkDir(path)
+        _ <- vfs.mkDirs(path)
         _ <- Scope.ensure(Abort.run(vfs.removeAll(path))).unit
       yield path
 
@@ -91,7 +91,7 @@ private[workflow] final case class CacheLayout(root: VPath):
     recover(path):
       for
         exists <- vfs.exists(path)
-        _      <- if exists then (() : Unit < (Sync & Abort[VfsError])) else vfs.mkDir(path)
+        _      <- if exists then (() : Unit < (Sync & Abort[VfsError])) else vfs.mkDirs(path)
       yield path
 
   def purge(vfs: Vfs.Backend)(using Frame): Unit < (Sync & Abort[WorkflowError]) =
