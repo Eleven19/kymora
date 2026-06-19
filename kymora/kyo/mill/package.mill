@@ -13,9 +13,7 @@ trait KyoMillModule extends _root_.build.CommonScalaModule with _root_.build.Pub
     )
 
     override def mvnDeps = Seq(
-        mvn"com.lihaoyi:mill-libs-scalalib_3:${_root_.build.KymoraVersions.Mill}",
-        mvn"com.lihaoyi:mill-libs-scalajslib_3:${_root_.build.KymoraVersions.Mill}",
-        mvn"com.lihaoyi:mill-libs-scalanativelib_3:${_root_.build.KymoraVersions.Mill}"
+        mvn"com.lihaoyi::mill-libs:${_root_.build.KymoraVersions.Mill}"
     )
 
     override protected def resolvedDepsWarnNonPlatform = Task { false }
@@ -29,7 +27,7 @@ object jvm extends KyoMillModule {
 
         override def mvnDeps = Task {
             super.mvnDeps() ++ Seq(
-                mvn"com.lihaoyi:mill-testkit_3:${_root_.build.KymoraVersions.Mill}"
+                mvn"com.lihaoyi::mill-testkit:${_root_.build.KymoraVersions.Mill}"
             )
         }
     }
@@ -45,7 +43,7 @@ object jvm extends KyoMillModule {
 
         override def mvnDeps = Task {
             super.mvnDeps() ++ Seq(
-                mvn"com.lihaoyi:mill-testkit_3:${_root_.build.KymoraVersions.Mill}"
+                mvn"com.lihaoyi::mill-testkit:${_root_.build.KymoraVersions.Mill}"
             )
         }
 
