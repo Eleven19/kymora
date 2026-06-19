@@ -70,6 +70,11 @@ object Workflow:
     /** Pure run-level configuration.
       *
       * This type intentionally contains no services or codecs. Operational dependencies live on [[Runtime]].
+      *
+      *   - `parallelism` caps concurrent scheduled work.
+      *   - `continueOnError` switches task-body failures from fail-fast to accumulation. Independent siblings continue,
+      *     dependents of failed nodes are cancelled, and the run ends with [[WorkflowError.Partial]] when any task
+      *     failed or was cancelled.
       */
     final case class Config(
         parallelism: Int,

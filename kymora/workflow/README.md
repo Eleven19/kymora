@@ -43,6 +43,8 @@ for the architecture and conventions.
     Override those defaults with named arguments when needed.
   - `Workflow.Runtime.default` creates an in-memory runtime using the same
     defaults.
+  - `Workflow.Config` controls pure run policy such as concurrency, cache
+    bypass, read-only mode, and continue-on-error handling.
   - `Workflow.context` / `Workflow.dest` expose the task context while a task
     value is being evaluated.
 - `Workflow.run(goal)` / `runAll(goals*)` — engine entry points;
@@ -98,6 +100,24 @@ val shorthand =
               }
   yield result
 ```
+
+## Run Configuration
+
+`Workflow.Config.default` fail-fasts on the first task failure. Set
+`continueOnError = true` for CI-style runs that should keep independent work
+running and report every task-level failure at the end:
+
+```scala
+val ciConfig =
+  Workflow.Config.default.copy(continueOnError = true)
+```
+
+In continue-on-error mode, task body failures emit `WorkflowEvent.TaskFailed` and
+are collected. Dependents of failed tasks are not evaluated; they emit
+`WorkflowEvent.TaskCancelled` and are included in the final
+`WorkflowError.Partial`. Storage-layer failures such as corrupt manifests remain
+fail-fast because they indicate engine/cache integrity problems rather than a
+task result.
 
 ## Task Workspaces
 
