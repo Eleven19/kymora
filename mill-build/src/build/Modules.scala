@@ -7,6 +7,9 @@ import mill.scalanativelib.*
 import coursier.maven.MavenRepository
 
 object KymoraVersions:
+    /** Pinned Mill version used by the project wrapper and plugin integration artifact. */
+    val Mill: String = "1.2.0-RC1"
+
     /** Pinned Kyo release candidate. All Kyo modules ship at the same version —
       * pinned together here. */
     val Kyo: String = "1.0.0-RC4"

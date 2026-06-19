@@ -1,0 +1,15 @@
+//| mvnDeps:
+//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+package build
+
+import mill.*, scalalib.*
+import io.eleven19.kymora.kyo.mill.test.*
+
+object app extends ScalaModule {
+  def scalaVersion = "3.8.4"
+  def mvnDeps = Seq(mvn"io.getkyo::kyo-core::1.0.0-RC4")
+
+  object test extends ScalaTests with KyoTestModule {
+    override def sources = Task.Sources(moduleDir / os.up / os.up / "test" / "src")
+  }
+}

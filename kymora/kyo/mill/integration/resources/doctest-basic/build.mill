@@ -1,0 +1,11 @@
+//| mvnDeps:
+//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+package build
+
+import mill.*, scalalib.*
+import io.eleven19.kymora.kyo.mill.doctest.*
+
+object app extends ScalaModule with KyoDoctestModule {
+  def scalaVersion = "3.8.4"
+  override def doctestSources = Task.Sources(moduleDir / os.up / "README.md")
+}

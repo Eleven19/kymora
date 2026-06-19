@@ -1,0 +1,19 @@
+//| mvnDeps:
+//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+package build
+
+import io.eleven19.kymora.kyo.mill.ffi.*
+import io.eleven19.kymora.kyo.mill.test.*
+import mill.*, scalalib.*
+
+object app extends KyoFfiModule {
+  def scalaVersion = "3.8.4"
+  override def ffiLibraryId = Task { "textkit" }
+  override def ffiRuntimeJavaOptions = Task {
+    super.ffiRuntimeJavaOptions() ++ Seq("--enable-native-access=ALL-UNNAMED")
+  }
+
+  object test extends ScalaTests with KyoTestModule with KyoFfiTests {
+    override def ffiRuntimeJavaOptions = app.ffiRuntimeJavaOptions()
+  }
+}
