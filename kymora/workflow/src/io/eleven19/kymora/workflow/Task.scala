@@ -1113,8 +1113,9 @@ object Task:
     ): P => Task[A] =
         cached[A, P, D1, D2, D3, D4, D5, D6, D7, D8](id, TaskVersion.v1)(d1, d2, d3, d4, d5, d6, d7, d8)(value)
 
-    /** Same caching contract as Cached, but the .dest/ directory is preserved across rebuilds. On cache hits the stored
-      * value is decoded; on misses the value expression runs with access to the previous .dest contents.
+    /** Same typed record contract as Cached, but the `.dest/` directory is preserved across rebuilds. On cache hits the
+      * stored value is decoded; on misses the value expression runs with exclusive access to the previous `.dest`
+      * contents. If the body fails, partial `.dest` contents are retained for the next invalidating run.
       */
     final class Persistent[A] @publicInBinary private[workflow] (
         val id: TaskId,

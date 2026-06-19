@@ -131,6 +131,12 @@ val stateful = Task.persistent("stateful") {
 }
 ```
 
+Persistent workspaces are intentionally updated in place. When a persistent task
+body fails, the engine releases the per-key lock but does not clean `.dest`;
+partial files remain available to the next invalidating run. This matches
+incremental tools such as compilers and analyzers that can repair or continue
+from their own working directory.
+
 ## Task Kinds
 
 Each task kind is useful in a different part of the graph. These examples all
@@ -193,7 +199,10 @@ val report = Task.cached("report") {
 ### Persistent
 
 `Task.persistent` has the same typed record semantics as `Task.cached`, but it
-evaluates in a preserved `.dest` directory when invalidated:
+evaluates in a preserved `.dest` directory when invalidated. The engine holds a
+per-root/per-key advisory lock while the body runs, so concurrent runs of the
+same persistent task do not mutate the same workspace at the same time. On
+failure, `.dest` is retained rather than cleaned up.
 
 ```scala
 var revision = 1
