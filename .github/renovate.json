@@ -1,0 +1,164 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "dependencyDashboard": true,
+  "labels": ["dependencies"],
+  "timezone": "America/Chicago",
+  "ignorePaths": [".claude/**", ".ref/**"],
+  "enabledManagers": ["github-actions", "npm", "custom.regex"],
+  "packageRules": [
+    {
+      "description": "Keep Mill wrapper and Mill library pins together.",
+      "matchPackageNames": ["com.lihaoyi:mill-libs_3"],
+      "groupName": "Mill"
+    },
+    {
+      "description": "Keep Kyo pins and published Kyo Mill defaults together.",
+      "matchPackageNames": ["io.getkyo:kyo-core_3"],
+      "groupName": "Kyo"
+    },
+    {
+      "description": "Keep Scala.js pins and published Kyo Mill defaults together.",
+      "matchPackageNames": ["org.scala-js:scalajs-compiler_2.13"],
+      "groupName": "Scala.js"
+    },
+    {
+      "description": "Keep Scala Native pins and published Kyo Mill defaults together.",
+      "matchPackageNames": ["scala-native/scala-native"],
+      "groupName": "Scala Native"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^build\\.mill\\.yaml$/"],
+      "matchStrings": ["mill-version:\\s*(?<currentValue>[^\\s]+)"],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "com.lihaoyi:mill-libs_3",
+      "versioningTemplate": "maven"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^mill-build/src/build/Modules\\.scala$/"],
+      "matchStrings": ["val Mill: String = \"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "com.lihaoyi:mill-libs_3",
+      "versioningTemplate": "maven"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^mill-build/src/build/Modules\\.scala$/",
+        "/^kymora/kyo/mill/src/io/eleven19/kymora/kyo/mill/KyoMillDefaults\\.scala$/"
+      ],
+      "matchStrings": [
+        "val Kyo: String = \"(?<currentValue>[^\"]+)\"",
+        "val kyoVersion: String\\s*= \"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "io.getkyo:kyo-core_3",
+      "versioningTemplate": "maven"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^mill-build/src/build/Modules\\.scala$/"],
+      "matchStrings": ["val Scribe: String = \"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "com.outr:scribe_3",
+      "versioningTemplate": "maven"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^mill-build/src/build/Modules\\.scala$/"],
+      "matchStrings": ["\"(?<currentValue>[^\"]+)\"\\s*\\n\\s*}\\s*\\n\\s*\\n\\s*override def scalacOptions"],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "org.scala-lang:scala3-library_3",
+      "versioningTemplate": "maven"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^mill-build/src/build/Modules\\.scala$/",
+        "/^kymora/kyo/mill/src/io/eleven19/kymora/kyo/mill/KyoMillDefaults\\.scala$/",
+        "/^kymora/kyo/mill/integration/resources/.+\\.mill$/"
+      ],
+      "matchStrings": [
+        "def scalaJSVersion = \"(?<currentValue>[^\"]+)\"",
+        "val scalaJSVersion: String\\s*= \"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "org.scala-js:scalajs-compiler_2.13",
+      "versioningTemplate": "maven"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^mill-build/src/build/Modules\\.scala$/",
+        "/^kymora/kyo/mill/src/io/eleven19/kymora/kyo/mill/KyoMillDefaults\\.scala$/",
+        "/^kymora/kyo/mill/integration/resources/.+\\.mill$/"
+      ],
+      "matchStrings": [
+        "def scalaNativeVersion = \"(?<currentValue>[^\"]+)\"",
+        "val scalaNativeVersion: String\\s*= \"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "scala-native/scala-native",
+      "versioningTemplate": "semver"
+    },
+    {
+      "description": "Update full Scala-crossed literal Maven dependencies in Mill files and scripts.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/\\.mill$/",
+        "/\\.mill\\.ya?ml$/",
+        "/\\.scala$/"
+      ],
+      "matchStrings": [
+        "mvn\"(?<group>[^:\"]+):::(?<artifact>[^:\"]+):{1,2}(?<currentValue>[^\"$:{};]+)(?:;[^\"]*)?\"",
+        "(?:^|[\\n\\[,])\\s*(?://\\|\\s*)?(?:-\\s*)?(?:(?:[A-Za-z][A-Za-z0-9]*)?[Mm]vnDeps:\\s*)?(?:\\[\\s*)?(?<group>[A-Za-z0-9_.-]+):::(?<artifact>[A-Za-z0-9_.-]+):{1,2}(?<currentValue>[^\\s,\\]\"';$:{}]+)"
+      ],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "{{{group}}}:{{{artifact}}}_3.8.4",
+      "versioningTemplate": "maven"
+    },
+    {
+      "description": "Update binary Scala-crossed literal Maven dependencies in Mill files and scripts.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/\\.mill$/",
+        "/\\.mill\\.ya?ml$/",
+        "/\\.scala$/"
+      ],
+      "matchStrings": [
+        "mvn\"(?<group>[^:\"]+)::(?<artifact>[^:\"]+):{1,2}(?<currentValue>[^\"$:{};]+)(?:;[^\"]*)?\"",
+        "(?:^|[\\n\\[,])\\s*(?://\\|\\s*)?(?:-\\s*)?(?:(?:[A-Za-z][A-Za-z0-9]*)?[Mm]vnDeps:\\s*)?(?:\\[\\s*)?(?<group>[A-Za-z0-9_.-]+)::(?<artifact>[A-Za-z0-9_.-]+):{1,2}(?<currentValue>[^\\s,\\]\"';$:{}]+)"
+      ],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "{{{group}}}:{{{artifact}}}_3",
+      "versioningTemplate": "maven"
+    },
+    {
+      "description": "Update exact literal Maven dependencies in Mill files and scripts.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/\\.mill$/",
+        "/\\.mill\\.ya?ml$/",
+        "/\\.scala$/"
+      ],
+      "matchStrings": [
+        "mvn\"(?<depName>[^:\"\\s]+:[^:\"\\s]+):(?<currentValue>[^\"$:{};]+)(?:;[^\"]*)?\"",
+        "(?:^|[\\n\\[,])\\s*(?://\\|\\s*)?(?:-\\s*)?(?:(?:[A-Za-z][A-Za-z0-9]*)?[Mm]vnDeps:\\s*)?(?:\\[\\s*)?(?<depName>[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+):(?<currentValue>[^\\s,\\]\"';$:{}]+)"
+      ],
+      "datasourceTemplate": "maven",
+      "versioningTemplate": "maven"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": ["GIT_CLIFF_VERSION:\\s*\"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "orhun/git-cliff",
+      "versioningTemplate": "semver"
+    }
+  ]
+}
