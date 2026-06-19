@@ -413,16 +413,21 @@ private[workflow] object Scheduler:
         for
             rt <- Workflow.runtime
             layout = CacheLayout(rt.cacheRoot)
-            dest    <- layout.openPersistentWorkspace(rt.vfs, key)
-            started <- Clock.now
-            _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
-            ctx = newTaskContext(dest)
-            value <- runBody(task.id, ctx, task.value(ctx, depArgs))
-            vh = task.hashable.hash(value)
-            _ <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
-            _ <-
-                if cfg.readOnly || cfg.noCache then (): Unit < Async
-                else writeRecord(key, task, value, bodyHash, expected, vh)
+            result <- Scope.run:
+                for
+                    dest    <- layout.openPersistentWorkspace(rt.vfs, key)
+                    started <- Clock.now
+                    _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
+                    ctx = newTaskContext(dest)
+                    value <- runBody(task.id, ctx, task.value(ctx, depArgs))
+                    vh = task.hashable.hash(value)
+                    _ <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+                    _ <-
+                        if cfg.readOnly || cfg.noCache then (): Unit < Async
+                        else writeRecord(key, task, value, bodyHash, expected, vh)
+                yield value -> vh
+            value = result._1
+            vh    = result._2
         yield NodeResult(value, vh)
 
     // ---------------------------------------------------------------------

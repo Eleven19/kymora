@@ -1,14 +1,32 @@
 package io.eleven19.kymora.workflow.store.internal
 
-/** Scala.js variant: no-op mutex.
+import kyo.*
+
+/** Scala.js/Wasm variant of the per-key in-process mutex.
   *
-  * JS runs one fiber at a time on a single event-loop thread, so two
-  * concurrent `openPersistentWorkspace` calls for the same key already
-  * serialize naturally through fiber suspension. No host primitive is
-  * required (and the Scala.js `java.util.concurrent.Semaphore` stub
-  * omits blocking acquire methods anyway).
+  * The event loop is single-threaded, but Kyo fibers can still interleave at
+  * async boundaries while sharing the same `.dest/`. A tiny cooperative mutex
+  * is enough here and avoids unavailable `java.util.concurrent` primitives.
   */
-private[store] final class PersistentMutex:
-  def acquire(name: String): Unit = ()
-  def release(name: String): Unit = ()
+private[workflow] final class PersistentMutex:
+  private val held = scala.collection.mutable.Set.empty[String]
+
+  def acquire(name: String)(using Frame): Unit < Async =
+    def loop: Unit < Async =
+      Sync.Unsafe.defer {
+        if held.contains(name) then false
+        else
+          val _ = held.add(name)
+          true
+      }.flatMap { acquired =>
+        if acquired then ()
+        else Async.sleep(1.millis).andThen(loop)
+      }
+    loop
+
+  def release(name: String)(using Frame): Unit < Sync =
+    Sync.Unsafe.defer {
+      val _ = held.remove(name)
+      ()
+    }
 end PersistentMutex

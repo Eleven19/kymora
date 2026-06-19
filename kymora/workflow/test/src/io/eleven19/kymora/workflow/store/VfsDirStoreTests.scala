@@ -145,4 +145,34 @@ class VfsDirStoreTests extends Test[Any]:
       }
     yield ()
   }
+  "openPersistentWorkspace serializes across stores with the same root".timeout(3.minutes) in {
+    def run(store: CacheStore, state: AtomicRef[(Int, Int)]): Unit < (Async & Abort[StoreError]) =
+      Scope.run {
+        for
+          _ <- store.openPersistentWorkspace(CacheKey("p"))
+          _ <- state.updateAndGet { case (active, maxActive) =>
+            val nextActive = active + 1
+            (nextActive, math.max(maxActive, nextActive))
+          }
+          _ <- Async.sleep(100.millis)
+          _ <- state.updateAndGet { case (active, maxActive) =>
+            (active - 1, maxActive)
+          }.unit
+        yield ()
+      }
+
+    for
+      vfs    <- Vfs.inMemory.init
+      root    = VPath("cache")
+      first  <- VfsDirStore.init(root, vfs)
+      second <- VfsDirStore.init(root, vfs)
+      state  <- AtomicRef.init((0, 0))
+      a      <- Fiber.initUnscoped(run(first, state))
+      _      <- Async.sleep(10.millis)
+      b      <- Fiber.initUnscoped(run(second, state))
+      _      <- a.get
+      _      <- b.get
+      (_, maxActive) <- state.get
+    yield assert(maxActive == 1)
+  }
 end VfsDirStoreTests

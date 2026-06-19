@@ -14,20 +14,20 @@ unit-test suites (one suite or set of suites per criterion). The mapping below
 names the suite(s) per criterion and the `mill` selector that exercises them.
 
 The full workflow suite is `./mill kymora.workflow.jvm.test`; per-criterion
-suites are subsets of that target. Compile coverage is verified by
-`./mill kymora.workflow.{jvm,js,native}.compile`.
+suites are subsets of that target. Cross-platform coverage is verified by
+`./mill kymora.workflow.js.test + kymora.workflow.wasm.test + kymora.workflow.native.test`.
 
 ## Results per criterion
 
 | Criterion | Command(s) | Result | Notes |
 |---|---|---|---|
-| #1 cross-platform compile + jvm tests | `./mill kymora.workflow.{jvm,js,native}.compile`, `./mill kymora.workflow.jvm.test` | PASS | 137 / 137 jvm tests passing; JS + Native compile clean. |
-| #2 worked-example end-to-end + second-run cache | `./mill kymora.workflow.jvm.test` covers `EngineTests`, `PersistentEngineTests`, `CommandEngineTests` | PASS | Second-invocation HIT verified via `TaskCached` event assertion. Real cross-run persistence is simplified — body re-runs on HIT inside a single `Workflow.run` invocation (Task 44 simplification). |
+| #1 cross-platform compile + jvm tests | `./mill kymora.workflow.jvm.test`, `./mill kymora.workflow.js.test + kymora.workflow.wasm.test + kymora.workflow.native.test` | PASS | 196 / 196 workflow tests passing on JVM, JS, WASM, and Native. |
+| #2 worked-example end-to-end + second-run cache | `./mill kymora.workflow.jvm.test` covers `EngineTests`, `PersistentEngineTests`, `CommandEngineTests` | PASS | Second-invocation HIT verified via `TaskCached` event assertion; typed cached and persistent hits decode stored values without re-running bodies. |
 | #3 cache controls | `CacheControlsTests`, `ConfigTests` | PASS | `purge` / `clean` exercised end-to-end; `bypass` / `readOnly` / `noCache` covered as `Config` shape (no engine wiring beyond the flag plumbing). |
 | #4 macro literal validation | `TaskIdMacroTests`, `TaskScopeTests`, `ValidationTests`, `TaskIdTests` | PASS | Bad inputs (`"foo/bar"`, `"..foo"`, `"index"`) fail compilation; equivalent `.parse` returns `Result.Failure`. |
 | #5 reporter event sequences | `ConsoleReporterTests`, `JsonLinesReporterTests`, `ReporterTests`, `WorkflowEventTests` | PASS | `format` / `toJson` covered as pure helpers; success / cached / failed event sequences asserted via `TestReporter` in `EngineTests`. |
 | #6 no regression in core / vfs | `./mill kymora.core.jvm.{compile,test}`, `./mill kymora.vfs.jvm.{compile,test}` | PASS | core compile clean; vfs 83 / 83 tests pass; core test count below. |
-| #7 `Task.persistent` round-trip | `PersistentEngineTests`, `TaskPersistentTests` | PASS | Cached-equivalent execution path verified. Real `.dest/` retention across separate `run` invocations is deferred (Task 45 simplification: persistent behaves like `Cached` for v1). |
+| #7 `Task.persistent` round-trip | `PersistentEngineTests`, `TaskPersistentTests`, `VfsDirStoreTests` | PASS | Persistent bodies receive the real `.dest`, retain contents across invalidating runs, retain partial output on failure, and serialize same-key workspace access. |
 | #8 CLI surface (replaces `Command.cli` mainargs + `runCli`) | `CommandEngineTests`, `cli.CliTests` | PASS | `Task.cli` + `Workflow.runCli` removed and replaced by parameterized `Task.command[A, P]` + `io.eleven19.kymora.workflow.cli.Cli.runWith` backed by kyo-case-app (resolves #4 + #5). |
 | #9 examples end-to-end | `./mill kymora.examples.jvm.test` covers `SmileBuildTests`, `AgentSkillsTests` | PASS | 6 / 6 example tests passing. `smile-build` and `agent-skills` both exercise their workflows against a temp cache and assert event sequences. |
 
@@ -38,18 +38,20 @@ Updated after the v0.1 → v0.1-followups work landed (see the
 
 | Module | Suite | Tests | Pass | Fail |
 |---|---|---|---|---|
-| `kymora-workflow` | `kymora.workflow.jvm.test` | 159 | 159 | 0 |
+| `kymora-workflow` | `kymora.workflow.jvm.test` | 196 | 196 | 0 |
 | `kymora-workflow-testkit` | `kymora.workflow-testkit.jvm.test` | 26 | 26 | 0 |
 | `kymora-vfs` | `kymora.vfs.jvm.test` | 83 | 83 | 0 |
 | `kymora-examples` | `kymora.examples.jvm.test` | 6 | 6 | 0 |
 | `kymora-core` | `kymora.core.jvm.test` | 1 | 1 | 0 |
-| **Total** | — | **275** | **275** | **0** |
+| **Total** | — | **312** | **312** | **0** |
 
 Cross-platform verification beyond JVM:
 
 | Target | Result |
 |---|---|
-| `kymora.workflow.js.test` | PASS (159 tests green) |
+| `kymora.workflow.js.test` | PASS (196 tests green) |
+| `kymora.workflow.wasm.test` | PASS (196 tests green) |
+| `kymora.workflow.native.test` | PASS (196 tests green) |
 | `kymora.workflow-testkit.js.test` | PASS (26 tests green) |
 | `kymora.workflow.js.compile` | PASS |
 | `kymora.workflow.native.compile` | PASS |
@@ -74,7 +76,7 @@ fully resolved on the `workflow-v0.1-followups` bookmark.
 | #5 §9 | **CLOSED** — `kyo.Command` shadow sidestepped by consolidating all task kinds under `Task.<kind>` factories | `uutwknqs` |
 | #5 §10 | **CLOSED** — `Reporter` family renamed to `Observer` (also removes `kyo.test.TestReporter` shadow) | `oylwmuqr` |
 | #5 §11 | **CLOSED** — explicit `Schema` givens for opaque types | `xxtxunus` |
-| #5 §12 | **CLOSED** — `VfsDirStore.persistentLocks` scoped to `Impl` + `Semaphore`-backed `PersistentMutex` (Kyo-fiber-safe) | `kzlzvpnx`, `zruvktuo`, `ompukkyl` |
+| #5 §12 | **CLOSED** — `VfsDirStore` persistent locks are process-wide per root/key + `Semaphore`-backed `PersistentMutex` on JVM/Native and cooperative async mutex on JS/WASM | `kzlzvpnx`, `zruvktuo`, `ompukkyl` |
 | #7 | **CLOSED** — `WorkflowSpec` testkit base class with 3-min default per-test timeout | `qwmunmsx` |
 
 ### Open (deferred to next follow-up cycle)
@@ -83,8 +85,6 @@ fully resolved on the `workflow-v0.1-followups` bookmark.
   manifest as HIT without comparing the stored inputs hash against the
   recomputed one. The Source layer now contributes the right fingerprint
   (per §3); the next step is wiring it through manifest equality.
-- **#5 §2 `Task.Persistent` `.dest/` retention:** structurally Cached;
-  real persistent workspace handoff to the body still deferred.
 - **#5 §6 fiber-per-node fan-out:** parallelism still bounded per node's
   dep list. Whole-DAG fan-out is the next big scheduler refactor.
 - **#5 §7 `Config.continueOnError`:** field is observable but the
@@ -122,6 +122,6 @@ fully resolved on the `workflow-v0.1-followups` bookmark.
 The earlier `openPersistentWorkspace retains content across calls`
 flake under heavy parallel mill load is **closed**: root cause was
 `ReentrantLock` thread-affinity under Kyo's fiber scheduler. Replaced
-with a `Semaphore(1, fair=true)`-backed `PersistentMutex` (JVM/Native;
-no-op on Scala.js for its single-event-loop model). The test now runs
-sub-second on every platform (`zruvktuo`, `ompukkyl`).
+with a `Semaphore(1, fair=true)`-backed `PersistentMutex` on JVM/Native
+and a cooperative async mutex on JS/WASM. The store now also serializes
+two `VfsDirStore` instances sharing the same root.
