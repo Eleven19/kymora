@@ -137,6 +137,39 @@ class TypedCachingBehaviorTests extends Test[Any]:
       assert(attempt.fold(_ => false, _.isInstanceOf[WorkflowError.Store], _ => false))
   }
 
+  "Stale cache manifest with mismatched inputs hash is treated as a miss" in {
+    val count = new java.util.concurrent.atomic.AtomicInteger(0)
+    val goal = Task.cached("stale") {
+      CachedReport("fresh", count.incrementAndGet())
+    }
+    val bodyHash = Hashing.bodyHash(goal.id, goal.version)
+    val record = TaskRecord[CachedReport](
+      schemaVersion = TaskRecord.CurrentSchemaVersion,
+      value = CachedReport("stored", 9),
+      valueHash = summon[Hashable[CachedReport]].hash(CachedReport("stored", 9)),
+      inputsHash = Fingerprint.unsafe("blake3:stale"),
+      bodyVersion = goal.version,
+      bodyHash = bodyHash,
+      workflowVersion = "test",
+      scalaVersion = "3.8.4",
+      runtime = store.Runtime("test", "test", Maybe.empty),
+      createdAt = java.time.Instant.parse("2026-06-16T18:42:11Z"),
+    )
+    given Codec = Json()
+    val bytes = Chunk.from(summon[Schema[TaskRecord[CachedReport]]].encode(record).toArray)
+
+    for
+      driver <- WorkflowTestDriver.init
+      _      <- driver.store.write(CacheKey("stale"), bytes, Maybe.empty)
+      value  <- driver.run(goal)
+      events <- driver.events
+    yield
+      assert(value == CachedReport("fresh", 1))
+      assert(count.get() == 1)
+      assert(events.collect { case e: WorkflowEvent.TaskCached if e.id == goal.id => e }.isEmpty)
+      assert(events.collect { case e: WorkflowEvent.TaskCompleted if e.id == goal.id => e }.size == 1)
+  }
+
   "Custom Hashable customizes downstream invalidation" in {
     given Hashable[HashSeed] =
       seed => summon[Hashable[Int]].hash(seed.stable)

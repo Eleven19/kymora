@@ -22,8 +22,8 @@ suites are subsets of that target. Cross-platform coverage is verified by
 | Criterion | Command(s) | Result | Notes |
 |---|---|---|---|
 | #1 cross-platform compile + jvm tests | `./mill kymora.workflow.jvm.test`, `./mill kymora.workflow.js.test + kymora.workflow.wasm.test + kymora.workflow.native.test` | PASS | 196 / 196 workflow tests passing on JVM, JS, WASM, and Native. |
-| #2 worked-example end-to-end + second-run cache | `./mill kymora.workflow.jvm.test` covers `EngineTests`, `PersistentEngineTests`, `CommandEngineTests` | PASS | Second-invocation HIT verified via `TaskCached` event assertion; typed cached and persistent hits decode stored values without re-running bodies. |
-| #3 cache controls | `CacheControlsTests`, `ConfigTests` | PASS | `purge` / `clean` exercised end-to-end; `bypass` / `readOnly` / `noCache` covered as `Config` shape (no engine wiring beyond the flag plumbing). |
+| #2 worked-example end-to-end + second-run cache | `./mill kymora.workflow.jvm.test` covers `EngineTests`, `PersistentEngineTests`, `CommandEngineTests`, `TypedCachingBehaviorTests`, `SourceInvalidationTests`, `TaskRecordTests` | PASS | Second-invocation HIT verified via `TaskCached`; typed cached and persistent hits decode stored values without re-running bodies; stale manifests miss when `inputsHash` changes; source byte changes invalidate dependent cached tasks across runs; `TaskRecord[A]` round-trips through `VfsDirStore` for primitive and structured values. |
+| #3 cache controls | `CacheControlsTests`, `ConfigTests` | PASS | `purge` / `clean` exercised end-to-end; `bypass` forces body execution when a record exists; `readOnly` reads existing records but does not write misses; `noCache` neither reads nor writes task records. |
 | #4 macro literal validation | `TaskIdMacroTests`, `TaskScopeTests`, `ValidationTests`, `TaskIdTests` | PASS | Bad inputs (`"foo/bar"`, `"..foo"`, `"index"`) fail compilation; equivalent `.parse` returns `Result.Failure`. |
 | #5 reporter event sequences | `ConsoleReporterTests`, `JsonLinesReporterTests`, `ReporterTests`, `WorkflowEventTests` | PASS | `format` / `toJson` covered as pure helpers; success / cached / failed event sequences asserted via `TestReporter` in `EngineTests`. |
 | #6 no regression in core / vfs | `./mill kymora.core.jvm.{compile,test}`, `./mill kymora.vfs.jvm.{compile,test}` | PASS | core compile clean; vfs 83 / 83 tests pass; core test count below. |
@@ -81,15 +81,17 @@ fully resolved on the `workflow-v0.1-followups` bookmark.
 
 ### Open (deferred to next follow-up cycle)
 
-- **#5 §1 cross-run value persistence:** scheduler treats any existing
-  manifest as HIT without comparing the stored inputs hash against the
-  recomputed one. The Source layer now contributes the right fingerprint
-  (per §3); the next step is wiring it through manifest equality.
 - **#5 §6 fiber-per-node fan-out:** parallelism still bounded per node's
   dep list. Whole-DAG fan-out is the next big scheduler refactor.
 
 ### Resolved after this acceptance log
 
+- **#5 §1 / #11 cross-run value persistence:** cached and persistent task
+  misses write typed `TaskRecord[A]` manifests. Valid hits compare the stored
+  `inputsHash`, `bodyHash`, and `bodyVersion` against the recomputed values,
+  decode the stored value, emit `TaskCached`, and skip body evaluation.
+  Invalidated source fingerprints now force dependent cached tasks to re-run
+  across separate `Workflow.run` calls.
 - **#5 §7 / #14 `Config.continueOnError`:** the worklist scheduler now
   accumulates task-level failures into `WorkflowError.Partial` when
   `continueOnError = true`. Independent siblings continue, failed-node
