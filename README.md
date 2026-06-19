@@ -74,6 +74,34 @@ val run =
   yield output
 ```
 
+## Releasing
+
+Kymora uses split release workflows, matching the other Eleven19 Scala
+libraries:
+
+- **Release** creates or updates the GitHub release from `CHANGELOG.md` and
+  generated `git-cliff` notes.
+- **Publish Maven Central** publishes the resolved Mill artifacts to Sonatype
+  Central.
+- **Publish SNAPSHOT** publishes a manually selected ref as a Maven snapshot.
+
+The publish workflows read organization-level credentials from these GitHub
+secrets:
+
+- `ELEVEN19_SONATYPE_USERNAME`
+- `ELEVEN19_SONATYPE_PASSWORD`
+- `ELEVEN19_IO_PGP_SECRET_BASE64`
+- `ELEVEN19_IO_PGP_PASSPHRASE`
+
+Before cutting a release, update `VERSION` and add a matching
+`## [<version>] - <YYYY-MM-DD>` section to `CHANGELOG.md`; the release notes
+builder fails if that section is missing.
+
+For a manual release, run the **Release** workflow with the version without the
+leading `v`, then run **Publish Maven Central** with the same version after the
+release workflow succeeds. A human-pushed `v*` tag triggers both workflows
+directly.
+
 ## Developing
 
 This project uses [Jujutsu (`jj`)](https://jj-vcs.github.io/jj/) as its default
@@ -151,11 +179,12 @@ Git branch) to open a PR.
 4. **Push to GitHub** and open a PR:
 
    ```sh
-   jj git push --bookmark my-feature --allow-new
+   jj git push --bookmark my-feature
    gh pr create --fill --base main --head my-feature
    ```
 
-   Use `--allow-new` only the first time the bookmark is pushed.
+   This repository's `jj` version does not use an `--allow-new` flag; pushing a
+   new bookmark works without it.
 
 5. **Update the PR** after more work — re-describe/refine, point the bookmark at
    your newest change, and push again:

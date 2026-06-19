@@ -36,7 +36,7 @@ install_dir="${RUNNER_TEMP:-/tmp}/git-cliff-${version}"
 mkdir -p "$install_dir"
 curl -LsSf "$download_url" | tar -xz -C "$install_dir"
 
-binary_dir="$(find "$install_dir" -type f -name git-cliff -printf '%h\n' | head -n 1)"
+binary_dir="$(find "$install_dir" -type f -name git-cliff -exec dirname {} \; | head -n 1)"
 if [[ -z "$binary_dir" ]]; then
     echo "Unable to locate git-cliff binary under $install_dir" >&2
     exit 1
