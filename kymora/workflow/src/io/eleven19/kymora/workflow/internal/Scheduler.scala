@@ -51,9 +51,21 @@ private[workflow] object Scheduler:
       */
     final private case class ExecState(
         results: Map[TaskId, NodeResult] = Map.empty,
+        failures: Map[TaskId, WorkflowError] = Map.empty,
+        cancelled: Map[TaskId, WorkflowError.TaskCancelled] = Map.empty,
         running: Set[TaskId] = Set.empty,
-        claimed: Chunk[TaskId] = Chunk.empty
+        claimed: Chunk[TaskId] = Chunk.empty,
+        claimedCancelled: Chunk[WorkflowError.TaskCancelled] = Chunk.empty
     )
+
+    final private case class ScheduleClaim(
+        ready: Chunk[TaskId],
+        cancelled: Chunk[WorkflowError.TaskCancelled]
+    )
+
+    private enum NodeOutcome:
+        case Succeeded(result: NodeResult)
+        case Failed(error: WorkflowError)
 
     /** Planning phase: collect the reachable graph and derive dependency edges.
       */
@@ -110,7 +122,11 @@ private[workflow] object Scheduler:
                         meter <- Meter.initSemaphore(concurrency = math.max(1, cfg.parallelism))
                         state <- AtomicRef.init(ExecState())
                         _     <- scheduleReady(plan, state, meter)
-                        vals  <- Kyo.foreach(plan.goalIds)(id => state.get.map(_.results(id).value.asInstanceOf[A]))
+                        st    <- state.get
+                        errors = collectedErrors(plan, st)
+                        vals <-
+                            if errors.nonEmpty then Abort.fail(WorkflowError.Partial(errors))
+                            else Kyo.foreach(plan.goalIds)(id => state.get.map(_.results(id).value.asInstanceOf[A]))
                     yield Chunk.from(vals)
                 }
             }
@@ -136,20 +152,16 @@ private[workflow] object Scheduler:
             rt <- Workflow.runtime
             cfg   = rt.config
             limit = math.max(1, cfg.parallelism)
-            ready <- claimReady(plan, state, limit)
-            _ <- Async.foreach(ready, limit) { id =>
-                meter.run(runPlannedNode(plan, id, state)).map { result =>
-                    for
-                        _ <- state.updateAndGet { st =>
-                            st.copy(
-                                results = st.results.updated(id, result),
-                                running = st.running - id
-                            )
-                        }.unit
-                        _ <- scheduleReady(plan, state, meter)
-                    yield ()
-                }
-            }
+            claim <- claimReady(plan, state, limit)
+            _     <- Kyo.foreach(claim.cancelled)(error => emitFailure(error.id, error, rt.observer)).unit
+            _ <-
+                if claim.ready.isEmpty then
+                    if claim.cancelled.nonEmpty then scheduleReady(plan, state, meter)
+                    else (): Unit < (Async & Scope & Sync & Workflow & Abort[WorkflowError | Closed])
+                else
+                    Async.foreach(claim.ready, limit) { id =>
+                        completePlannedNode(plan, id, state, meter, cfg, rt.observer)
+                    }
         yield ()
     end scheduleReady
 
@@ -160,28 +172,115 @@ private[workflow] object Scheduler:
         plan: ExecutionPlan,
         state: AtomicRef[ExecState],
         limit: Int
-    ): Chunk[TaskId] < Sync =
+    ): ScheduleClaim < Sync =
         state
             .updateAndGet { st =>
-                val readyBuilder = Chunk.newBuilder[TaskId]
-                var claimed      = 0
+                val readyBuilder     = Chunk.newBuilder[TaskId]
+                val cancelledBuilder = Chunk.newBuilder[WorkflowError.TaskCancelled]
+                var claimed          = 0
                 plan.order.foreach { id =>
-                    if claimed < limit &&
-                        plan.tasks.contains(id) &&
-                        !st.results.contains(id) &&
-                        !st.running.contains(id) &&
-                        plan.deps(id).forall(d => st.results.contains(d))
-                    then
-                        readyBuilder.addOne(id)
-                        claimed += 1
+                    if plan.tasks.contains(id) && !isTerminal(st, id) && !st.running.contains(id) then
+                        blockedBy(plan, st, id) match
+                            case Some(dep) =>
+                                cancelledBuilder.addOne(
+                                    WorkflowError.TaskCancelled(id, s"dependency ${dep.value} did not complete")
+                                )
+                            case None =>
+                                if claimed < limit && plan.deps(id).forall(d => st.results.contains(d)) then
+                                    readyBuilder.addOne(id)
+                                    claimed += 1
                 }
-                val ready = readyBuilder.result()
+                val ready     = readyBuilder.result()
+                val cancelled = cancelledBuilder.result()
                 st.copy(
                     running = st.running ++ ready,
-                    claimed = ready
+                    cancelled = st.cancelled ++ cancelled.map(error => error.id -> error).toMap,
+                    claimed = ready,
+                    claimedCancelled = cancelled
                 )
             }
-            .map(_.claimed)
+            .map(st => ScheduleClaim(st.claimed, st.claimedCancelled))
+
+    private def completePlannedNode(
+        plan: ExecutionPlan,
+        id: TaskId,
+        state: AtomicRef[ExecState],
+        meter: Meter,
+        cfg: Workflow.Config,
+        observer: Observer
+    )(using
+        Frame
+    ): Unit < (Async & Scope & Sync & Workflow & Abort[WorkflowError | Closed]) =
+        for
+            outcome <- meter.run(nodeOutcome(id, runPlannedNode(plan, id, state)))
+            _ <- outcome match
+                case NodeOutcome.Succeeded(result) =>
+                    state.updateAndGet { st =>
+                        st.copy(
+                            results = st.results.updated(id, result),
+                            running = st.running - id
+                        )
+                    }.unit
+                case NodeOutcome.Failed(error) =>
+                    for
+                        _ <- emitFailure(id, error, observer)
+                        _ <-
+                            if cfg.continueOnError && isContinuable(error) then
+                                state.updateAndGet { st =>
+                                    st.copy(
+                                        failures = st.failures.updated(id, error),
+                                        running = st.running - id
+                                    )
+                                }.unit
+                            else Abort.fail(error)
+                    yield ()
+            _ <- scheduleReady(plan, state, meter)
+        yield ()
+
+    private def nodeOutcome(
+        id: TaskId,
+        value: => NodeResult < (Async & Workflow & Abort[WorkflowError])
+    )(using Frame): NodeOutcome < (Async & Workflow) =
+        Abort.run[WorkflowError](value).map {
+            case Result.Success(result) =>
+                NodeOutcome.Succeeded(result)
+            case Result.Failure(error) =>
+                NodeOutcome.Failed(error)
+            case Result.Panic(error) =>
+                NodeOutcome.Failed(WorkflowError.TaskFailed(id, Option(error.getMessage).getOrElse(error.toString)))
+        }
+
+    private def emitFailure(
+        id: TaskId,
+        error: WorkflowError,
+        observer: Observer
+    )(using Frame): Unit < Async =
+        error match
+            case WorkflowError.TaskCancelled(_, reason) =>
+                observer.onEvent(WorkflowEvent.TaskCancelled(id, reason))
+            case WorkflowError.TaskFailed(_, message) =>
+                observer.onEvent(WorkflowEvent.TaskFailed(id, message))
+            case other =>
+                observer.onEvent(WorkflowEvent.TaskFailed(id, other.toString))
+
+    private def isContinuable(error: WorkflowError): Boolean =
+        error match
+            case WorkflowError.Store(_) => false
+            case _                      => true
+
+    private def isTerminal(st: ExecState, id: TaskId): Boolean =
+        st.results.contains(id) || st.failures.contains(id) || st.cancelled.contains(id)
+
+    private def blockedBy(plan: ExecutionPlan, st: ExecState, id: TaskId): Option[TaskId] =
+        plan.deps(id).find(dep => st.failures.contains(dep) || st.cancelled.contains(dep))
+
+    private def collectedErrors(plan: ExecutionPlan, st: ExecState): Chunk[WorkflowError] =
+        val builder = Chunk.newBuilder[WorkflowError]
+        plan.order.foreach { id =>
+            st.failures.get(id).foreach(builder.addOne)
+            st.cancelled.get(id).foreach(builder.addOne)
+        }
+        builder.result()
 
     /** Run one planned node: emit `TaskQueued`, resolve deps from the memo, and dispatch on task kind.
       */

@@ -87,8 +87,15 @@ fully resolved on the `workflow-v0.1-followups` bookmark.
   (per §3); the next step is wiring it through manifest equality.
 - **#5 §6 fiber-per-node fan-out:** parallelism still bounded per node's
   dep list. Whole-DAG fan-out is the next big scheduler refactor.
-- **#5 §7 `Config.continueOnError`:** field is observable but the
-  scheduler still fail-fasts on the first `TaskFailed`.
+
+### Resolved after this acceptance log
+
+- **#5 §7 / #14 `Config.continueOnError`:** the worklist scheduler now
+  accumulates task-level failures into `WorkflowError.Partial` when
+  `continueOnError = true`. Independent siblings continue, failed-node
+  dependents are cancelled with `WorkflowError.TaskCancelled`, and
+  `WorkflowEvent.TaskFailed` / `TaskCancelled` events are emitted before the
+  final partial abort.
 
 ### Net new in v0.1-followups (not tracked by an issue)
 
