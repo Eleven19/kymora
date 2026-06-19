@@ -36,7 +36,7 @@ jobs:
   build:
     needs: metadata
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -44,6 +44,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
       - name: Setup Mill caches
         uses: ./.github/actions/setup-mill-caches
@@ -53,11 +57,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang libunwind-dev libgc-dev
 
-      - name: Compile all modules
-        run: ./mill __.compile
+      - name: Compile JVM modules
+        run: ./mill kymora.vfs.jvm.compile + kymora.workflow.jvm.compile + kymora.workflow-testkit.jvm.compile + kymora.kyo.mill.jvm.compile + kymora.examples.jvm.compile
 
-      - name: Run tests
-        run: ./mill __.test
+      - name: Run JVM tests
+        run: ./mill kymora.vfs.jvm.test + kymora.workflow.jvm.test + kymora.workflow-testkit.jvm.test + kymora.kyo.mill.jvm.test + kymora.examples.jvm.test
+
+      - name: Compile Scala.js modules
+        run: ./mill kymora.vfs.js.compile + kymora.workflow.js.compile + kymora.workflow-testkit.js.compile
+
+      - name: Run Scala.js tests
+        run: ./mill kymora.vfs.js.test + kymora.workflow.js.test + kymora.workflow-testkit.js.test
+
+      - name: Compile Scala.js WASM modules
+        run: ./mill kymora.vfs.wasm.compile + kymora.workflow.wasm.compile + kymora.workflow-testkit.wasm.compile
+
+      - name: Run Scala.js WASM tests
+        run: ./mill kymora.vfs.wasm.test + kymora.workflow.wasm.test + kymora.workflow-testkit.wasm.test
+
+      - name: Compile Scala Native modules
+        run: ./mill kymora.vfs.native.compile + kymora.workflow.native.compile + kymora.workflow-testkit.native.compile
+
+      - name: Run Scala Native tests
+        run: ./mill kymora.vfs.native.test + kymora.workflow.native.test + kymora.workflow-testkit.native.test
+
+      - name: Run Kyo Mill plugin integration tests
+        run: ./mill kymora.kyo.mill.jvm.integration
 
   publish:
     needs:

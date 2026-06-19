@@ -11,8 +11,11 @@ GitHub release body.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-19
+
 ### Added
 
-- Initial project setup: Mill cross-platform build (`kymora-vfs`)
-  on JVM / JS / Native, kyo-test test framework, and CI / publish / release
-  GitHub Actions workflows.
+- Initial cross-platform Kymora modules: `kymora-vfs`, `kymora-workflow`, and
+  `kymora-workflow-testkit` on JVM, Scala.js, Scala.js WASM, and Scala Native.
+- JVM-only `kymora-kyo-mill` plugin for downstream Kyo users building with Mill.
+- CI, snapshot publish, Maven Central publish, and GitHub release workflows.
