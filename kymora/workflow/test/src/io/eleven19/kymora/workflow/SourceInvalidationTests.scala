@@ -5,16 +5,8 @@ import io.eleven19.kymora.workflow.testkit.*
 import kyo.*
 import kyo.test.*
 
-/** Closes #5 §3 — proves [[Task.Source]] now content-hashes via the
-  * workflow runtime VFS rather than the prior path-string sentinel.
-  *
-  * End-to-end downstream-cache invalidation (mutate a file, assert a
-  * dependent `Task.Cached` re-runs on the next `Workflow.run`) is gated
-  * on cross-run value persistence (#5 §1) — the scheduler currently
-  * treats any existing manifest as a HIT without comparing its stored
-  * inputs hash against the recomputed one. Until §1 lands, these tests
-  * assert the Source layer in isolation: the `VPathRef.fingerprint` it
-  * produces.
+/** Closes #5 §3 and #11: [[Task.Source]] content-hashes through the workflow runtime VFS, and dependent cached tasks
+  * invalidate across separate [[Workflow.run]] invocations when source bytes change.
   */
 class SourceInvalidationTests extends Test[Any]:
 
@@ -30,6 +22,30 @@ class SourceInvalidationTests extends Test[Any]:
     yield
       assert(ref1.path == ref2.path)
       assert(ref1.fingerprint != ref2.fingerprint)
+  }
+
+  "Dependent Task.Cached re-runs across invocations when source bytes change" in {
+    val path  = VPath("input.txt")
+    val src   = Task.source("src")(path)
+    val count = new java.util.concurrent.atomic.AtomicInteger(0)
+    val compiled = Task.cached("compile")(src) { ref =>
+      s"${ref.fingerprint.value}:${count.incrementAndGet()}"
+    }
+
+    for
+      driver <- WorkflowTestDriver.init
+      _      <- driver.vfs.writeBytes(path, Span.from("v1".getBytes), createFolders = true)
+      first  <- driver.run(compiled)
+      _      <- driver.vfs.writeBytes(path, Span.from("v2".getBytes), createFolders = true)
+      second <- driver.run(compiled)
+      events <- driver.events
+    yield
+      assert(first.endsWith(":1"))
+      assert(second.endsWith(":2"))
+      assert(first != second)
+      assert(count.get() == 2)
+      assert(events.collect { case e: WorkflowEvent.TaskCompleted if e.id == compiled.id => e }.size == 2)
+      assert(events.collect { case e: WorkflowEvent.TaskCached if e.id == compiled.id => e }.isEmpty)
   }
 
   "Source.fingerprint stable when the file bytes are unchanged" in {

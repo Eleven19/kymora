@@ -119,6 +119,11 @@ are collected. Dependents of failed tasks are not evaluated; they emit
 fail-fast because they indicate engine/cache integrity problems rather than a
 task result.
 
+Cache policy flags control how typed task records are used. `bypass` forces the
+selected task IDs to run even when a valid record exists, then writes the fresh
+record unless another flag prevents writes. `readOnly` may read existing records
+but does not write records for misses. `noCache` skips both reads and writes.
+
 ## Task Workspaces
 
 Task values can access their engine-managed destination directory through
