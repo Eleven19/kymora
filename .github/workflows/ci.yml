@@ -143,6 +143,43 @@ jobs:
       - name: Run Kyo Mill plugin tests
         run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-kyo-mill kymora.kyo.mill.jvm.test + kymora.kyo.mill.jvm.integration
 
+  docs-and-site:
+    name: Docs & Site
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Setup Mill remote cache
+        uses: actions/cache@v4
+        with:
+          path: .mill-remote-cache
+          key: ${{ runner.os }}-mill-remote-docs-site-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-mill-remote-docs-site-
+
+      - name: Validate README snippets and website tests
+        run: ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-docs-site kymora.docs.jvm.doctest + kymora.website.jvm.test
+
+      - name: Link and render site
+        run: |
+          ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-docs-site kymora.website-bundle.js.fullLinkJS
+          ./mill --remote-cache-location .mill-remote-cache --remote-cache-filter __.compile --remote-cache-salt ${{ runner.os }}-docs-site kymora.website.jvm.run --out "$GITHUB_WORKSPACE/site" --repo-root "$GITHUB_WORKSPACE" --base-path "/kymora"
+
   build-wasm:
     name: Build & Test (Scala.js WASM)
     needs: [build]

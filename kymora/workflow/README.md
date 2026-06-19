@@ -8,7 +8,7 @@ VFS access, cache layout, observability, and run configuration.
 The module is published for JVM, Scala.js, Scala.js WASM, and Scala Native.
 WASM tests run on Node.js 24+.
 
-See [the design spec](../../docs/superpowers/specs/2026-06-16-kymora-workflow-design.md)
+See the [acceptance plan](../../docs/superpowers/plans/acceptance-2026-06-17-kymora-workflow.md)
 for the architecture and conventions.
 
 ## Overview
@@ -85,9 +85,18 @@ val program =
 Inside an active `Workflow`, `task()` is shorthand for `Workflow.run(task)`:
 
 ```scala
-Workflow.handle(runtime) {
-  compile()
+val compileAgain = Task.cached("compile-again") {
+  "compiled"
 }
+
+val shorthand =
+  for
+    backend <- Vfs.inMemory.init
+    runtime = Workflow.Runtime(backend)
+    result <- Workflow.handle(runtime) {
+                compileAgain()
+              }
+  yield result
 ```
 
 ## Task Workspaces
@@ -208,7 +217,7 @@ workflow execution, never writes a record, and still hashes its value for cached
 dependents:
 
 ```scala
-val clock = Task.activity("clock")(System.currentTimeMillis())
+val clock = Task.activity("clock")(java.lang.System.currentTimeMillis())
 val formatted = Task.cached("formatted-clock")(clock) { millis =>
   s"clock=$millis"
 }
@@ -220,6 +229,7 @@ val formatted = Task.cached("formatted-clock")(clock) { millis =>
 as goals; their dependencies still cache normally:
 
 ```scala
+val source = Task.source("publish-source")(VPath.root / "src" / "Main.scala")
 val packageJar = Task.cached("package")(source) { ref =>
   s"jar for ${ref.path.show}"
 }
@@ -283,9 +293,13 @@ val invalid = Task.cached[Int]("invalid") {
 }
 
 val recovered =
-  Workflow.handle(runtime) {
-    Abort.run[WorkflowError](invalid())
-  }
+  for
+    backend <- Vfs.inMemory.init
+    runtime = Workflow.Runtime(backend)
+    result <- Workflow.handle(runtime) {
+                Abort.run[WorkflowError](invalid())
+              }
+  yield result
 ```
 
 Observers receive structured `WorkflowEvent`s such as `TaskQueued`,

@@ -204,10 +204,14 @@ val host: Vfs.Backend < Sync =
 
 // Mount multiple backends into one virtual filesystem.
 val mounted: Vfs.Backend < (Sync & Abort[VfsError]) =
-  Vfs.mounted.init(
-    Mount(VPath.root / "work", workBackend),
-    Mount(VPath.root / "cache", cacheBackend),
-  )
+  for
+    workBackend <- Vfs.inMemory.init
+    cacheBackend <- Vfs.inMemory.init
+    mounted <- Vfs.mounted.init(
+                 Mount(VPath.root / "work", workBackend),
+                 Mount(VPath.root / "cache", cacheBackend),
+               )
+  yield mounted
 ```
 
 Host backends expose the configured host root as virtual `/` and reject paths

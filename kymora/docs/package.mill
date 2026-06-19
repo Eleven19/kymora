@@ -1,0 +1,35 @@
+package build.kymora.docs
+
+import mill.*, scalalib.*
+
+object jvm extends _root_.build.CommonScalaModule with _root_.build.KymoraDoctestModule {
+    override def moduleDeps = Seq(
+        build.kymora.vfs.jvm,
+        build.kymora.workflow.jvm,
+        build.kymora.kyo.mill.jvm
+    )
+
+    override def mvnDeps = Seq(
+        mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-test-api::${_root_.build.KymoraVersions.Kyo}",
+        mvn"com.lihaoyi::mill-libs:${_root_.build.KymoraVersions.Mill}"
+    )
+
+    override def doctestSources = Task.Sources(
+        moduleDir / os.up / os.up / os.up / "README.md",
+        moduleDir / os.up / os.up / "vfs" / "README.md",
+        moduleDir / os.up / os.up / "workflow" / "README.md",
+        moduleDir / os.up / os.up / "workflow-testkit" / "README.md",
+        moduleDir / os.up / os.up / "kyo" / "mill" / "README.md"
+    )
+
+    override def doctestParallelism = Task { 2 }
+
+    override def doctestPredef: T[Seq[String]] = Task {
+        Seq(
+            "import kyo.*",
+            "import io.eleven19.kymora.vfs.*",
+            "import io.eleven19.kymora.workflow.*"
+        )
+    }
+}

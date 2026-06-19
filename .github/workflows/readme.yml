@@ -1,0 +1,32 @@
+name: README
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".github/CODEOWNERS"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - ".github/CODEOWNERS"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Mill caches
+        uses: ./.github/actions/setup-mill-caches
+
+      - name: Validate public README snippets
+        run: ./mill kymora.docs.jvm.doctest

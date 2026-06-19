@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 128" role="img" aria-labelledby="title desc">
+  <title id="title">Kymora logo</title>
+  <desc id="desc">Kymora wordmark with a rounded three-dimensional blue and violet K icon.</desc>
+  <defs>
+    <linearGradient id="kymora-logo-bg" x1="18" y1="110" x2="110" y2="18" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000A23"/>
+      <stop offset="0.55" stop-color="#07153B"/>
+      <stop offset="1" stop-color="#4E46E0"/>
+    </linearGradient>
+    <radialGradient id="kymora-logo-bg-glow" cx="78" cy="35" r="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4E46E0" stop-opacity="0.52"/>
+      <stop offset="0.42" stop-color="#0563FF" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#000A23" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="kymora-logo-orbit" x1="22" y1="42" x2="108" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#89DDFF"/>
+      <stop offset="0.5" stop-color="#0563FF"/>
+      <stop offset="1" stop-color="#9D97F0"/>
+    </linearGradient>
+    <linearGradient id="kymora-logo-side" x1="56" y1="34" x2="105" y2="107" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#112A70"/>
+      <stop offset="0.55" stop-color="#0451D8"/>
+      <stop offset="1" stop-color="#000A23"/>
+    </linearGradient>
+    <linearGradient id="kymora-logo-k" x1="38" y1="31" x2="91" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.58" stop-color="#DDEBFF"/>
+      <stop offset="1" stop-color="#89DDFF"/>
+    </linearGradient>
+    <linearGradient id="kymora-logo-bevel" x1="36" y1="31" x2="95" y2="97" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.92"/>
+      <stop offset="0.42" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#89DDFF" stop-opacity="0.1"/>
+    </linearGradient>
+    <linearGradient id="kymora-logo-text" x1="142" y1="31" x2="402" y2="98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000A23"/>
+      <stop offset="0.55" stop-color="#332CB8"/>
+      <stop offset="1" stop-color="#0563FF"/>
+    </linearGradient>
+    <filter id="kymora-logo-orbit-shadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="6" dy="8" stdDeviation="5" flood-color="#000A23" flood-opacity="0.52"/>
+      <feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#89DDFF" flood-opacity="0.2"/>
+    </filter>
+    <filter id="kymora-logo-dot-shadow" x="-80%" y="-80%" width="260%" height="260%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="5" dy="7" stdDeviation="3" flood-color="#000A23" flood-opacity="0.46"/>
+    </filter>
+    <filter id="kymora-logo-shadow" x="-35%" y="-35%" width="170%" height="170%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="9" flood-color="#000A23" flood-opacity="0.54"/>
+      <feDropShadow dx="8" dy="9" stdDeviation="4" flood-color="#000A23" flood-opacity="0.32"/>
+    </filter>
+    <filter id="kymora-logo-soft-shadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="27" fill="url(#kymora-logo-bg)"/>
+  <rect x="8" y="8" width="112" height="112" rx="27" fill="url(#kymora-logo-bg-glow)"/>
+  <rect x="12" y="12" width="104" height="104" rx="24" fill="none" stroke="#FFFFFF" stroke-opacity="0.08"/>
+  <g opacity="0.48" fill="none" stroke="#000A23" stroke-linecap="round" transform="translate(6 7)" filter="url(#kymora-logo-orbit-shadow)">
+    <path d="M27 66c9-24 27-38 50-38 16 0 29 7 39 19" stroke-width="11"/>
+    <path d="M107 62c-8 25-27 40-51 40-16 0-29-7-38-20" stroke-width="11"/>
+    <path d="M34 36c21 9 45 27 66 56" stroke-width="7"/>
+  </g>
+  <g opacity="0.98" fill="none" stroke="url(#kymora-logo-orbit)" stroke-linecap="round" filter="url(#kymora-logo-orbit-shadow)">
+    <path d="M27 66c9-24 27-38 50-38 16 0 29 7 39 19" stroke-width="8"/>
+    <path d="M107 62c-8 25-27 40-51 40-16 0-29-7-38-20" stroke-width="8"/>
+    <path d="M34 36c21 9 45 27 66 56" stroke-width="5" opacity="0.58"/>
+  </g>
+  <g transform="translate(9 7) scale(0.88)">
+    <path
+      d="M39 31h20v32l31-32h25L79 67l38 30H91L59 72v25H39z"
+      transform="translate(8 9)"
+      fill="#000A23"
+      opacity="0.46"
+      filter="url(#kymora-logo-soft-shadow)"
+    />
+    <path
+      d="M39 31h20v32l31-32h25L79 67l38 30H91L59 72v25H39z"
+      transform="translate(5 6)"
+      fill="url(#kymora-logo-side)"
+      opacity="0.96"
+    />
+    <path
+      d="M39 31h20v32l31-32h25L79 67l38 30H91L59 72v25H39z"
+      fill="url(#kymora-logo-k)"
+      stroke="url(#kymora-logo-bevel)"
+      stroke-width="2"
+      stroke-linejoin="round"
+      filter="url(#kymora-logo-shadow)"
+    />
+    <path d="M50 40h9v38l-9 11zM90 40h15L73 70l-8-5z" fill="#FFFFFF" opacity="0.22"/>
+  </g>
+  <circle cx="109" cy="51" r="8" fill="#000A23" opacity="0.42" filter="url(#kymora-logo-dot-shadow)"/>
+  <circle cx="35" cy="88" r="6" fill="#000A23" opacity="0.38" filter="url(#kymora-logo-dot-shadow)"/>
+  <circle cx="104" cy="45" r="7" fill="#89DDFF" filter="url(#kymora-logo-dot-shadow)"/>
+  <circle cx="30" cy="82" r="5" fill="#9D97F0" filter="url(#kymora-logo-dot-shadow)"/>
+  <text
+    x="146"
+    y="83"
+    fill="url(#kymora-logo-text)"
+    font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    font-size="54"
+    font-weight="800"
+    letter-spacing="0"
+  >Kymora</text>
+</svg>
