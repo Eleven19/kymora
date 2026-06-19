@@ -30,4 +30,46 @@ class WorkflowTestDriverTests extends Test[Any]:
       assert(events.size == 1)
       assert(events.head == WorkflowEvent.TaskQueued(TaskId("foo")))
   }
+
+  "WorkflowTestDriver exposes live telemetry snapshots while preserving collected events" in {
+    val goal = Task.init("foo")(42)
+
+    for
+      driver   <- WorkflowTestDriver.init
+      result   <- driver.run(goal)
+      snapshot <- driver.telemetry.snapshot
+      events   <- driver.events
+    yield
+      assert(result == 42)
+      assert(events.nonEmpty)
+      assert(snapshot.events == events)
+      assert(snapshot.tasks(TaskId("foo")).status == WorkflowRunState.TaskStatus.Succeeded)
+  }
+
+  "WorkflowTestDriver keeps telemetry and observer event order aligned under parallel execution" in {
+    val goals = (0 until 16).map(i => Task.init(s"parallel-$i")(i))
+
+    for
+      driver <- WorkflowTestDriver.init
+      runtime = driver.runtime.copy(config = driver.config.copy(parallelism = 4))
+      _        <- Workflow.handle(runtime)(Workflow.runAll(goals*))
+      snapshot <- driver.telemetry.snapshot
+      events   <- driver.events
+    yield
+      assert(events.nonEmpty)
+      assert(snapshot.events == events)
+  }
+
+  "WorkflowTestDriver telemetry supports listeners" in {
+    val event = WorkflowEvent.TaskQueued(TaskId("listened"))
+
+    Scope.run {
+      for
+        driver   <- WorkflowTestDriver.init
+        listener <- driver.telemetry.listen()
+        _        <- driver.telemetry.publish(event)
+        seen     <- listener.take
+      yield assert(seen == event)
+    }
+  }
 end WorkflowTestDriverTests

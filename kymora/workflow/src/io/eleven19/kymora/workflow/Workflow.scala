@@ -1,6 +1,7 @@
 package io.eleven19.kymora.workflow
 
 import io.eleven19.kymora.workflow.internal.CacheLayout
+import io.eleven19.kymora.workflow.internal.Planner
 import io.eleven19.kymora.workflow.internal.Scheduler
 import io.eleven19.kymora.workflow.internal.Validation
 import io.eleven19.kymora.workflow.store.CacheKey
@@ -33,17 +34,21 @@ object Workflow:
 
     /** Concrete runtime dependencies used to handle the [[Workflow]] effect.
       *
-      * `config` is pure run policy. `vfs`, `cacheRoot`, `observer`, and `codec` are runtime capabilities selected by
-      * the host application. Use `Runtime(vfs)` when you already have a backend, or [[Runtime.default]] for an
-      * in-memory runtime with the default cache root and silent observer.
+      * `config` is pure run policy. `vfs`, `cacheRoot`, `observer`, `codec`, and `telemetryOverride` are runtime
+      * capabilities selected by the host application. Use `Runtime(vfs)` when you already have a backend, or
+      * [[Runtime.default]] for an in-memory runtime with the default cache root and silent observer.
       */
     final case class Runtime(
         config: Workflow.Config = Workflow.Config.default,
         vfs: Vfs.Backend,
         cacheRoot: VPath = VPath("cache"),
         observer: Observer = Observer.NoOp,
-        codec: Codec = Json()
-    )
+        codec: Codec = Json(),
+        telemetryOverride: Maybe[WorkflowTelemetry] = Maybe.empty
+    ):
+
+        def telemetry: WorkflowTelemetry =
+            telemetryOverride.getOrElse(observer.asTelemetry)
 
     object Runtime:
 
@@ -53,7 +58,8 @@ object Workflow:
                 vfs = vfs,
                 cacheRoot = VPath("cache"),
                 observer = Observer.NoOp,
-                codec = Json()
+                codec = Json(),
+                telemetryOverride = Maybe.empty
             )
 
         def default(using Frame): Runtime < Sync =
@@ -145,6 +151,15 @@ object Workflow:
         Frame
     ): Chunk[A] < (Async & Workflow & Abort[WorkflowError]) =
         Scheduler.executeAll(Chunk.from(goals))
+
+    def inspectResult(goals: AnyTask*): Result[WorkflowError, WorkflowPlan] =
+        Planner.inspect(Chunk.from(goals))
+
+    def inspect(goals: AnyTask*): WorkflowPlan =
+        inspectResult(goals*) match
+            case Result.Success(plan)  => plan
+            case Result.Failure(error) => throw WorkflowException(error)
+            case Result.Panic(error)   => throw error
 
     def purge()(using Frame): Unit < (Async & Workflow & Abort[WorkflowError]) =
         for

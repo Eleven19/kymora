@@ -32,4 +32,21 @@ class EngineTests extends Test[Any]:
       assert(events.collect { case e: WorkflowEvent.TaskCached => e }.size == 1)
       assert(events.collect { case e: WorkflowEvent.TaskCompleted => e }.size == 1)
   }
+
+  "Runtime observer still receives scheduler events through default telemetry" in {
+    val goal = Task.init("foo")(42)
+
+    for
+      vfs      <- io.eleven19.kymora.vfs.Vfs.inMemory.init
+      observer <- CollectingObserver.init
+      runtime = Workflow.Runtime(vfs = vfs, observer = observer)
+      result <- Workflow.handle(runtime)(Workflow.run(goal))
+      events <- observer.events
+    yield
+      assert(result == 42)
+      assert(events.exists {
+        case WorkflowEvent.TaskCompleted(id, _, _) if id == TaskId("foo") => true
+        case _                                                            => false
+      })
+  }
 end EngineTests

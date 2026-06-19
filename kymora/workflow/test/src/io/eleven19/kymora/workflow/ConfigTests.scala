@@ -66,6 +66,43 @@ class ConfigTests extends Test[Any]:
       assert(runtime.codec.isInstanceOf[Json])
   }
 
+  "Runtime telemetry defaults to the observer adapter" in {
+    val event = WorkflowEvent.TaskQueued(TaskId("foo"))
+
+    for
+      vfs <- Vfs.inMemory.init
+      ref <- AtomicRef.init(Chunk.empty[WorkflowEvent])
+      observer = new Observer:
+                   override def onEvent(event: WorkflowEvent): Unit < Async =
+                     ref.updateAndGet(_.appended(event)).unit
+      runtime = Workflow.Runtime(vfs = vfs, observer = observer)
+      _      <- runtime.telemetry.publish(event)
+      events <- ref.get
+    yield assert(events == Chunk(event))
+  }
+
+  "Runtime telemetry can be overridden independently of the observer" in {
+    val event = WorkflowEvent.TaskQueued(TaskId("foo"))
+
+    for
+      vfs          <- Vfs.inMemory.init
+      observerRef  <- AtomicRef.init(Chunk.empty[WorkflowEvent])
+      telemetryRef <- AtomicRef.init(Chunk.empty[WorkflowEvent])
+      observer = new Observer:
+                   override def onEvent(event: WorkflowEvent): Unit < Async =
+                     observerRef.updateAndGet(_.appended(event)).unit
+      telemetry = new WorkflowTelemetry:
+                    override def publish(event: WorkflowEvent)(using Frame): Unit < Async =
+                      telemetryRef.updateAndGet(_.appended(event)).unit
+      runtime = Workflow.Runtime(vfs = vfs, observer = observer, telemetryOverride = Maybe(telemetry))
+      _               <- runtime.telemetry.publish(event)
+      observerEvents  <- observerRef.get
+      telemetryEvents <- telemetryRef.get
+    yield
+      assert(observerEvents.isEmpty)
+      assert(telemetryEvents == Chunk(event))
+  }
+
   "Runtime.default uses the same constructor defaults" in {
     for runtime <- Workflow.Runtime.default
     yield

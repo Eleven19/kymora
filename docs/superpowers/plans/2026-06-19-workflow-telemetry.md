@@ -4,9 +4,9 @@
 
 **Goal:** Replace the current direct observer callback path with a first-class workflow telemetry layer that supports static task-plan inspection, structured live event fanout, state snapshots, and UI-friendly state streaming while preserving existing observer behavior.
 
-**Architecture:** Keep `WorkflowEvent` as the canonical event protocol. Extract a public plan model from the existing scheduler planning phase, introduce `WorkflowTelemetry` as the runtime event/state substrate, implement it with Kyo `Hub` for event fanout and a Kyo `Actor` + `SignalRef` state projector for deterministic run-state updates, and adapt existing `Observer`s to the new layer.
+**Architecture:** Keep `WorkflowEvent` as the canonical event protocol. Extract a public plan model from the existing scheduler planning phase, introduce `WorkflowTelemetry` as the runtime event/state substrate, implement it with Kyo `Hub` for event fanout plus a Kyo `Meter` mutex and `SignalRef` for deterministic run-state updates, and adapt existing `Observer`s to the new layer.
 
-**Tech Stack:** Scala 3.8.4, Mill, Kyo `Hub`, `Actor`, `Signal`, `Stream`, existing `Workflow`, `Task`, `Observer`, `WorkflowEvent`, and kyo-test.
+**Tech Stack:** Scala 3.8.4, Mill, Kyo `Hub`, `Meter`, `Signal`, `Stream`, existing `Workflow`, `Task`, `Observer`, `WorkflowEvent`, and kyo-test.
 
 ---
 
@@ -14,6 +14,8 @@
 
 - Create `kymora/workflow/src/io/eleven19/kymora/workflow/WorkflowPlan.scala`
   - Public static inspection model: task kind, direct deps, goals, stable order.
+- Create `kymora/workflow/src/io/eleven19/kymora/workflow/TaskDescriptor.scala`
+  - Reusable data-only task description used by `WorkflowPlan` and future inspect/reporting APIs.
 - Create `kymora/workflow/src/io/eleven19/kymora/workflow/WorkflowRunState.scala`
   - Public live-state model projected from `WorkflowEvent`s.
 - Create `kymora/workflow/src/io/eleven19/kymora/workflow/WorkflowTelemetry.scala`
@@ -21,7 +23,7 @@
 - Create `kymora/workflow/src/io/eleven19/kymora/workflow/internal/Planner.scala`
   - Shared graph planning logic used by `Workflow.inspect` and `Scheduler`.
 - Create `kymora/workflow/src/io/eleven19/kymora/workflow/internal/HubWorkflowTelemetry.scala`
-  - Kyo `Hub` + `Actor` + `SignalRef` implementation.
+  - Kyo `Hub` + `Meter` mutex + `SignalRef` implementation.
 - Modify `kymora/workflow/src/io/eleven19/kymora/workflow/Workflow.scala`
   - Add `Runtime.telemetry`, compatibility wiring for `Runtime.observer`, and public `inspect`.
 - Modify `kymora/workflow/src/io/eleven19/kymora/workflow/internal/Scheduler.scala`
@@ -33,7 +35,7 @@
 - Modify `kymora/workflow/src/io/eleven19/kymora/workflow/JsonLinesObserver.scala`
   - No behavior change; keep as an observer adapter target.
 - Modify `kymora/workflow/package.mill`
-  - Add `kyo-actor` dependency for all workflow platforms.
+  - No telemetry-specific dependency is required; live telemetry uses primitives from `kyo-core`.
 - Create tests:
   - `kymora/workflow/test/src/io/eleven19/kymora/workflow/WorkflowPlanTests.scala`
   - `kymora/workflow/test/src/io/eleven19/kymora/workflow/WorkflowRunStateTests.scala`
@@ -46,7 +48,7 @@
 
 - Preserve `Workflow.Runtime(..., observer = Observer.NoOp, codec = Json())` source compatibility.
 - Keep `WorkflowEvent` as the durable event protocol.
-- Do not expose internal `AnyTask` or executable task bodies through `WorkflowPlan`.
+- Use `AnyTask` at public inspect boundaries, but do not expose executable task bodies through `WorkflowPlan`.
 - Public inspect output must be pure metadata: ids, kind, deps, goals, order.
 - Event publishing must not require a live subscriber.
 - Live UI consumers should subscribe to state snapshots or state changes, not reconstruct state from events unless they explicitly want an event log.
@@ -55,21 +57,20 @@
 
 ---
 
-### Task 1: Add Kyo Actor Dependency
+### Task 1: Verify Telemetry Primitive Dependencies
 
 **Files:**
 - Modify: `kymora/workflow/package.mill`
 
-- [ ] **Step 1: Add `kyo-actor` to workflow dependencies**
+- [ ] **Step 1: Keep telemetry on existing `kyo-core` primitives**
 
-Edit `WorkflowModule.mvnDeps`:
+`WorkflowModule.mvnDeps` should continue to depend on `kyo-core`, `kyo-schema`, and `kyo-case-app`; no `kyo-actor` dependency is required for the final live telemetry implementation:
 
 ```scala
 def mvnDeps = Seq(
     mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
     mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
     mvn"io.getkyo::kyo-case-app::${_root_.build.KymoraVersions.Kyo}",
-    mvn"io.getkyo::kyo-actor::${_root_.build.KymoraVersions.Kyo}",
     // Pure-Scala BLAKE3 — cross-platform (JVM / Scala.js / Wasm / Scala Native)
     // via `%%%`. Used by the engine's `Fingerprint` primitive so cache
     // manifests are byte-identical across platforms.
@@ -84,12 +85,11 @@ override def mvnDeps = Seq(
     mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
     mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
     mvn"io.getkyo::kyo-case-app::${_root_.build.KymoraVersions.Kyo}",
-    mvn"io.getkyo::kyo-actor::${_root_.build.KymoraVersions.Kyo}",
     mvn"pt.kcry:blake3_sjs1_3:3.1.2"
 )
 ```
 
-- [ ] **Step 2: Verify dependency resolves**
+- [ ] **Step 2: Verify dependencies resolve**
 
 Run:
 
@@ -97,14 +97,14 @@ Run:
 ./mill --no-server kymora.workflow.jvm.compile
 ```
 
-Expected: compile succeeds or fails only because `kyo-actor` artifact naming is unsupported on a platform. If artifact resolution fails, inspect Kyo module coordinates in `.ref/getkyo/kyo/kyo-actor/package.mill` and correct the Mill dependency spelling before moving on.
+Expected: compile succeeds.
 
 - [ ] **Step 3: Checkpoint**
 
 Run:
 
 ```sh
-jj describe -m "Add workflow actor dependency"
+jj describe -m "Verify workflow telemetry dependencies"
 ```
 
 ---
@@ -133,14 +133,14 @@ class WorkflowPlanTests extends Test[Any]:
     val check  = Task.cached("check")(parse)(text => text.length)
     val pack   = Task.command("pack")(check)(n => n)
 
-    val plan = Workflow.inspect(pack)
+    val plan = Workflow.inspect(AnyTask(pack))
 
     assert(plan.goalIds == Chunk(TaskId("pack")))
     assert(plan.order == Chunk(TaskId("source"), TaskId("parse"), TaskId("check"), TaskId("pack")))
-    assert(plan.node(TaskId("source")).map(_.kind) == Maybe(WorkflowPlan.TaskKind.Source))
+    assert(plan.node(TaskId("source")).map(_.kind) == Maybe(TaskDescriptor.Kind.Source))
     assert(plan.node(TaskId("parse")).map(_.deps) == Maybe(Chunk(TaskId("source"))))
     assert(plan.node(TaskId("check")).map(_.deps) == Maybe(Chunk(TaskId("parse"))))
-    assert(plan.node(TaskId("pack")).map(_.kind) == Maybe(WorkflowPlan.TaskKind.Command))
+    assert(plan.node(TaskId("pack")).map(_.kind) == Maybe(TaskDescriptor.Kind.Command))
   }
 
   "Workflow.inspect reports duplicate task ids as WorkflowError" in {
@@ -148,7 +148,7 @@ class WorkflowPlanTests extends Test[Any]:
     val right = Task.cached("dup")(2)
     val root  = Task.cached("root")(left, right)((_, _) => 0)
 
-    val result = Workflow.inspectResult(root)
+    val result = Workflow.inspectResult(AnyTask(root))
 
     assert(result.isFailure)
   }
@@ -166,7 +166,34 @@ Run:
 
 Expected: compile failure mentioning missing `Workflow.inspect`, `Workflow.inspectResult`, or `WorkflowPlan`.
 
-- [ ] **Step 3: Add public plan model**
+- [ ] **Step 3: Add public task descriptor and plan model**
+
+Create `TaskDescriptor.scala`:
+
+```scala
+package io.eleven19.kymora.workflow
+
+import kyo.*
+
+/** Data-only description of a workflow task. */
+final case class TaskDescriptor(
+    id: TaskId,
+    kind: TaskDescriptor.Kind,
+    deps: Chunk[TaskId],
+    version: TaskVersion
+) derives CanEqual
+
+object TaskDescriptor:
+    enum Kind derives CanEqual:
+        case Source
+        case Sources
+        case Input
+        case Cached
+        case Persistent
+        case Activity
+        case Command
+end TaskDescriptor
+```
 
 Create `WorkflowPlan.scala`:
 
@@ -177,33 +204,13 @@ import kyo.*
 
 /** Static, execution-free description of the reachable task graph for one or more workflow goals. */
 final case class WorkflowPlan(
-    nodes: Map[TaskId, WorkflowPlan.Node],
+    nodes: Map[TaskId, TaskDescriptor],
     goalIds: Chunk[TaskId],
     order: Chunk[TaskId]
 ) derives CanEqual:
 
-    def node(id: TaskId): Maybe[WorkflowPlan.Node] =
-        nodes.get(id).fold(Maybe.empty[WorkflowPlan.Node])(Maybe(_))
-
-end WorkflowPlan
-
-object WorkflowPlan:
-
-    final case class Node(
-        id: TaskId,
-        kind: TaskKind,
-        deps: Chunk[TaskId],
-        version: TaskVersion
-    ) derives CanEqual
-
-    enum TaskKind derives CanEqual:
-        case Source
-        case Sources
-        case Input
-        case Cached
-        case Persistent
-        case Activity
-        case Command
+    def node(id: TaskId): Maybe[TaskDescriptor] =
+        nodes.get(id).fold(Maybe.empty[TaskDescriptor])(Maybe(_))
 
 end WorkflowPlan
 ```
@@ -255,23 +262,22 @@ private[workflow] object Planner:
         order: Chunk[TaskId]
     )
 
-    def build(goals: Chunk[Task[?]]): Result[WorkflowError, ExecutionPlan] =
-        val anyGoals = goals.map(AnyTask(_))
-        Graph.collect(anyGoals.toSeq).map { tasks =>
+    def build(goals: Chunk[AnyTask]): Result[WorkflowError, ExecutionPlan] =
+        Graph.collect(goals.toSeq).map { tasks =>
             val deps = tasks.map((id, task) => id -> Graph.depIdsOf(task))
             ExecutionPlan(
                 tasks = tasks,
                 deps = deps,
                 goalIds = goals.map(_.id),
-                order = stableOrder(anyGoals)
+                order = stableOrder(goals)
             )
         }
 
-    def inspect(goals: Chunk[Task[?]]): Result[WorkflowError, WorkflowPlan] =
+    def inspect(goals: Chunk[AnyTask]): Result[WorkflowError, WorkflowPlan] =
         build(goals).map { plan =>
             val nodes =
                 plan.tasks.map { (id, task) =>
-                    id -> WorkflowPlan.Node(
+                    id -> TaskDescriptor(
                         id = id,
                         kind = kindOf(task),
                         deps = plan.deps(id),
@@ -295,15 +301,15 @@ private[workflow] object Planner:
         goals.foreach(visit)
         result.result()
 
-    private def kindOf(task: AnyTask): WorkflowPlan.TaskKind =
+    private def kindOf(task: AnyTask): TaskDescriptor.Kind =
         task.unsafeTask match
-            case _: Task.Source        => WorkflowPlan.TaskKind.Source
-            case _: Task.Sources       => WorkflowPlan.TaskKind.Sources
-            case _: Task.Input[?]      => WorkflowPlan.TaskKind.Input
-            case _: Task.Cached[?]     => WorkflowPlan.TaskKind.Cached
-            case _: Task.Persistent[?] => WorkflowPlan.TaskKind.Persistent
-            case _: Task.Activity[?]   => WorkflowPlan.TaskKind.Activity
-            case _: Task.Command[?]    => WorkflowPlan.TaskKind.Command
+            case _: Task.Source        => TaskDescriptor.Kind.Source
+            case _: Task.Sources       => TaskDescriptor.Kind.Sources
+            case _: Task.Input[?]      => TaskDescriptor.Kind.Input
+            case _: Task.Cached[?]     => TaskDescriptor.Kind.Cached
+            case _: Task.Persistent[?] => TaskDescriptor.Kind.Persistent
+            case _: Task.Activity[?]   => TaskDescriptor.Kind.Activity
+            case _: Task.Command[?]    => TaskDescriptor.Kind.Command
 
 end Planner
 ```
@@ -327,7 +333,7 @@ plan <- Abort.get(plan(Chunk.from(goals)))
 with:
 
 ```scala
-plan <- Abort.get(Planner.build(Chunk.from(goals)))
+plan <- Abort.get(Planner.build(Chunk.from(goals).map(AnyTask(_))))
 ```
 
 - [ ] **Step 3: Add public inspect API**
@@ -341,10 +347,10 @@ import io.eleven19.kymora.workflow.internal.Planner
 Add methods in `object Workflow`:
 
 ```scala
-def inspectResult(goals: Task[?]*): Result[WorkflowError, WorkflowPlan] =
+def inspectResult(goals: AnyTask*): Result[WorkflowError, WorkflowPlan] =
     Planner.inspect(Chunk.from(goals))
 
-def inspect(goals: Task[?]*): WorkflowPlan =
+def inspect(goals: AnyTask*): WorkflowPlan =
     inspectResult(goals*) match
         case Result.Success(plan) => plan
         case Result.Failure(error) =>
@@ -655,7 +661,7 @@ jj describe -m "Add workflow telemetry interface"
 
 ---
 
-### Task 6: Hub + Actor Telemetry Implementation
+### Task 6: Hub + Mutex Telemetry Implementation
 
 **Files:**
 - Create: `kymora/workflow/src/io/eleven19/kymora/workflow/internal/HubWorkflowTelemetry.scala`
@@ -757,7 +763,7 @@ object WorkflowTelemetry:
 end WorkflowTelemetry
 ```
 
-- [ ] **Step 4: Implement Hub telemetry with actor projector**
+- [ ] **Step 4: Implement Hub telemetry with serialized publish section**
 
 Create `HubWorkflowTelemetry.scala`:
 
@@ -770,12 +776,19 @@ import kyo.*
 private[workflow] final class HubWorkflowTelemetry private (
     hub: Hub[WorkflowEvent],
     stateRef: SignalRef[WorkflowRunState],
-    projector: Actor[Nothing, HubWorkflowTelemetry.ProjectorMessage, Unit]
+    serial: Meter
 ) extends WorkflowTelemetry:
 
     override def publish(event: WorkflowEvent)(using Frame): Unit < Async =
         Abort.recover[Closed](_ => ()):
-            hub.put(event).andThen(projector.send(HubWorkflowTelemetry.ProjectorMessage.Apply(event)))
+            serial.run:
+                for
+                    published <- Abort.run[Closed](hub.put(event))
+                    _ <- published match
+                        case Result.Success(_) => stateRef.updateAndGet(_.applyEvent(event)).unit
+                        case Result.Failure(_) => Kyo.unit
+                        case Result.Panic(ex)  => Abort.panic(ex)
+                yield ()
 
     override def snapshot(using Frame): WorkflowRunState < Async =
         stateRef.current
@@ -787,23 +800,17 @@ end HubWorkflowTelemetry
 
 private[workflow] object HubWorkflowTelemetry:
 
-    enum ProjectorMessage derives CanEqual:
-        case Apply(event: WorkflowEvent)
-
     def init(bufferSize: Int)(using Frame): HubWorkflowTelemetry < (Sync & Scope & Async) =
         for
             hub      <- Hub.init[WorkflowEvent](bufferSize)
             stateRef <- Signal.initRef(WorkflowRunState.empty)
-            projector <- Actor.run[Nothing, ProjectorMessage, Unit, Any] {
-                Actor.receiveAll[ProjectorMessage] {
-                    case ProjectorMessage.Apply(event) =>
-                        stateRef.update(_.applyEvent(event)).unit
-                }
-            }
-        yield HubWorkflowTelemetry(hub, stateRef, projector)
+            serial   <- Meter.initMutexUnscoped
+        yield HubWorkflowTelemetry(hub, stateRef, serial)
 
 end HubWorkflowTelemetry
 ```
+
+This intentionally uses a `Meter` mutex rather than `Actor.ask`: per-publish acknowledgements must not be stranded if a scoped actor shuts down with queued messages. The mutex still linearizes hub fanout and state projection, preserves snapshot-after-publish for successful publishes, and treats closed hubs as whole-publish no-ops.
 
 - [ ] **Step 5: Run telemetry tests**
 
@@ -890,6 +897,11 @@ final case class Runtime(
 ```
 
 Update existing `Runtime.apply(vfs)` and `Runtime.default` constructors to rely on default `telemetryOverride = Maybe.empty`.
+
+Compatibility note: adding `telemetryOverride` to the public case class keeps normal source construction compatible for
+callers that use named arguments or the existing four/five-argument source forms, but it changes the generated case
+class constructor, `copy`, and `unapply` shape. Treat this as an intentional ABI/case-class-shape change for the
+telemetry release.
 
 - [ ] **Step 4: Replace scheduler observer calls with telemetry publish**
 
@@ -1002,10 +1014,13 @@ def runtime: Workflow.Runtime =
   Workflow.Runtime(config, vfs, VPath("cache"), observer, Json(), Maybe(telemetry))
 ```
 
-Modify `init`:
+Modify `init` to create a scope-managed, listener-capable telemetry for snapshots and a collecting observer adapter for
+existing event assertions:
 
 ```scala
-telemetry <- WorkflowTelemetry.live()
+live     <- TestWorkflowTelemetry.init
+serial   <- Meter.initMutexUnscoped
+telemetry = FanoutWorkflowTelemetry(live, observer.asTelemetry, serial)
 ```
 
 and construct:
@@ -1014,7 +1029,10 @@ and construct:
 yield new WorkflowTestDriver(cfg, vfs, store, observer, telemetry)
 ```
 
-Keep `events` backed by `CollectingObserver` for source compatibility.
+`TestWorkflowTelemetry.init` must use scoped `Hub.init`, not `Hub.initUnscoped`, so `WorkflowTestDriver.init` includes
+`Scope` in its effect. Keep `events` backed by `CollectingObserver` for source compatibility. The fanout telemetry must
+serialize live and observer publishing so `driver.telemetry.snapshot.events` and `driver.events` remain in the same order
+under parallel execution.
 
 - [ ] **Step 4: Run testkit tests**
 
@@ -1125,7 +1143,7 @@ Scope.run {
 }
 ```
 
-Use `Workflow.inspect(goal)` when you only need the static dependency plan and
+Use `Workflow.inspect(AnyTask(goal))` when you only need the static dependency plan and
 do not want to execute task bodies.
 ```
 
@@ -1232,7 +1250,9 @@ jj describe -m "Add workflow telemetry and inspection APIs"
   - Live task visibility: Tasks 5, 6, 7, 8, and 9 add telemetry publishing, hub listeners, state projection, and testkit access.
   - UI state reporting: Tasks 4 and 9 expose `WorkflowRunState` and `Signal[WorkflowRunState]`.
   - Current observer compatibility: Tasks 5 and 7 preserve observer forwarding.
-  - Kyo primitive choice: Task 6 uses `Hub` for fanout and `Actor` for serialized projection; Task 9 exposes `Signal`.
+  - Kyo primitive choice: Task 6 uses `Hub` for fanout and a `Meter` mutex for serialized projection; Task 9 exposes `Signal`.
+  - Runtime compatibility deliberately preserves source-level construction patterns while accepting the case-class ABI
+    shape change from adding `telemetryOverride`.
 - Placeholder scan:
   - No placeholder-only implementation steps are present.
   - Each code task includes exact file paths, test commands, and expected results.
