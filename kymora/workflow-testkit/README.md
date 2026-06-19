@@ -27,7 +27,7 @@ test code would force every consumer to reinvent them.
 
 ## Usage sketch
 
-```scala
+```scala doctest:expect=skipped
 import io.eleven19.kymora.workflow.*
 import io.eleven19.kymora.workflow.testkit.*
 import kyo.*

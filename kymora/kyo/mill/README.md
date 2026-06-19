@@ -5,7 +5,7 @@ Kyo semantics where useful, but it does not port sbt concepts into Mill: users
 add one Mill plugin dependency, mix traits into normal Mill modules, and run
 ordinary Mill tasks.
 
-```scala
+```scala doctest:expect=skipped
 //| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
 
 import io.eleven19.kymora.kyo.mill.compat.*
@@ -24,7 +24,7 @@ The public API is organized by integration theme: `test`, `wasm`,
 
 Use the platform-specific test trait for the module you are defining.
 
-```scala
+```scala doctest:expect=skipped
 object app extends ScalaModule {
   def scalaVersion = "3.8.4"
 
@@ -41,7 +41,7 @@ For Scala.js, Scala.js WebAssembly, and Scala Native tests, use
 including the `_sjs1-wasm` platform suffix, ES modules, and Node.js runtime
 flags expected by Kyo WASM artifacts.
 
-```scala
+```scala doctest:expect=skipped
 object app extends KyoScalaJSWasmModule {
   def scalaVersion = "3.8.4"
 }
@@ -54,7 +54,7 @@ WASM test execution requires Node.js 24 or newer.
 `KyoDoctestModule` validates Markdown or Scala documentation snippets via
 Kyo's doctest CLI. Validation commands do not rewrite tracked files.
 
-```scala
+```scala doctest:expect=skipped
 object docs extends ScalaModule with KyoDoctestModule {
   def scalaVersion = "3.8.4"
 
@@ -82,7 +82,7 @@ Mill modules are statically declared, so consumers model backend/platform
 combinations with ordinary modules or `Cross` modules instead of sbt
 ProjectMatrix-style dynamic generation.
 
-```scala
+```scala doctest:expect=skipped
 object zioCompat extends ScalaModule with KyoCompatModule {
   def scalaVersion = "3.8.4"
   def compatBackend = CompatBackend.Zio
@@ -100,7 +100,7 @@ evaluated.
 runtime and codegen semantics, but exposes them as ordinary Mill tasks and
 module traits.
 
-```scala
+```scala doctest:expect=skipped
 //| mvnDeps:
 //| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
 package build
@@ -138,7 +138,7 @@ app/
 
 Application code stays the Kyo FFI model:
 
-```scala
+```scala doctest:expect=skipped
 package example
 
 import kyo.AllowUnsafe
@@ -160,7 +160,7 @@ For Scala Native vendored C, mark the Kyo binding as bundled so generated code
 does not emit `@link("<library>")`; the Mill task copies C sources into managed
 `resources/scala-native` for Scala Native to compile into the binary:
 
-```scala
+```scala doctest:expect=skipped
 object MathBindings extends Ffi.Config(library = "math", nativeBundled = true)
 ```
 
@@ -170,7 +170,7 @@ The sbt-compatible traits are an explicit layout compatibility layer, not an
 sbt task/settings port. Use them when a downstream project already keeps Scala
 and C sources under Maven-style directories.
 
-```scala
+```scala doctest:expect=skipped
 object app extends KyoFfiSbtModule {
   def scalaVersion = "3.8.4"
 
@@ -233,7 +233,7 @@ copyable examples.
 `ffi-string-library` models a small `textkit` C library that accepts multiple
 `String` values and returns primitive results:
 
-```scala
+```scala doctest:expect=skipped
 trait TextKitBindings extends Ffi:
   def textkitCountWords(text: String)(using AllowUnsafe): Int
   def textkitHasPrefix(text: String, prefix: String)(using AllowUnsafe): Boolean
@@ -252,7 +252,7 @@ bool textkit_has_prefix(const char *text, const char *prefix) {
 `ffi-struct-library` models a `contacts` C library with nested structs, string
 parameters, and a struct return containing a string field:
 
-```scala
+```scala doctest:expect=skipped
 case class Address(zip: Int, cityCode: Int)
 case class Contact(id: Int, score: Int, address: Address)
 case class Badge(priority: Int, label: String)

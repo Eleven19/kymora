@@ -1,0 +1,17 @@
+package build.kymora.`website-bundle`
+
+import mill.*, scalalib.*, scalajslib.*
+
+object js extends _root_.build.CommonScalaModule with _root_.build.CommonScalaJSModule {
+    override def moduleDeps = Seq(build.kymora.website.js)
+
+    override def mainClass: T[Option[String]] =
+        Task { Some("io.eleven19.kymora.website.WebsiteBundleMain") }
+
+    override def moduleKind: T[mill.scalajslib.api.ModuleKind] =
+        Task { mill.scalajslib.api.ModuleKind.ESModule }
+
+    override def mvnDeps = Seq(
+        mvn"org.scala-js::scalajs-dom::2.8.0"
+    )
+}
