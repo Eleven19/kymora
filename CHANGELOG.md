@@ -11,6 +11,24 @@ GitHub release body.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-19
+
+### Added
+
+- Workflow telemetry and inspection APIs.
+- Kymora docs/website module and release-time docs validation.
+- Renovate automation for dependency update management.
+
+### Changed
+
+- Workflow engine now supports persistent workspaces and cross-run cache value
+  persistence.
+- Workflow execution now enforces `continueOnError`.
+
+### Fixed
+
+- Removed HostVfs Windows path workaround.
+
 ## [0.1.0] - 2026-06-19
 
 ### Added

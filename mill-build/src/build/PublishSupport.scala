@@ -8,7 +8,7 @@ import mill.scalalib.publish.{Developer, License, PomSettings, VersionControl}
 
 trait PublishSupport extends PublishModule with SonatypeCentralPublishModule {
   this: JavaModule =>
-  private val defaultPublishVersion = "0.1.0-SNAPSHOT"
+  private val defaultPublishVersion = "0.2.0-SNAPSHOT"
 
   def publishVersion = Task.Input {
     sys.env.getOrElse("PUBLISH_VERSION", defaultPublishVersion)
