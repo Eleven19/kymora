@@ -1,6 +1,7 @@
 package io.eleven19.kymora.workflow.internal
 
 import io.eleven19.kymora.workflow.*
+import io.eleven19.kymora.workflow.internal.Planner.ExecutionPlan
 import io.eleven19.kymora.workflow.store.*
 import io.eleven19.kymora.vfs.Vfs
 import kyo.*
@@ -28,24 +29,6 @@ private[workflow] object Scheduler:
       */
     final private case class NodeResult(value: Any, valueHash: Fingerprint)
 
-    /** Output of the planning phase: every reachable task and the edges needed for worklist scheduling.
-      *
-      * @param tasks
-      *   all reachable tasks keyed by id
-      * @param deps
-      *   direct dependency ids per task (declaration order preserved)
-      * @param goalIds
-      *   goal task ids in caller declaration order
-      * @param order
-      *   stable execution order: dependency-before-dependent, goals in caller order (DFS postorder)
-      */
-    final private case class ExecutionPlan(
-        tasks: Map[TaskId, AnyTask],
-        deps: Map[TaskId, Chunk[TaskId]],
-        goalIds: Chunk[TaskId],
-        order: Chunk[TaskId]
-    )
-
     /** Scheduling state for one `executeAll` run — memoised results plus the in-flight set used to avoid
       * double-scheduling under concurrent completion.
       */
@@ -63,47 +46,15 @@ private[workflow] object Scheduler:
         cancelled: Chunk[WorkflowError.TaskCancelled]
     )
 
+    final private case class RunStats(
+        hits: Int = 0,
+        misses: Int = 0,
+        failed: Int = 0
+    )
+
     private enum NodeOutcome:
         case Succeeded(result: NodeResult)
         case Failed(error: WorkflowError)
-
-    /** Planning phase: collect the reachable graph and derive dependency edges.
-      */
-    private def plan(
-        goals: Chunk[Task[?]]
-    ): Result[WorkflowError, ExecutionPlan] =
-        val anyGoals = goals.map(AnyTask(_))
-        Graph.collect(anyGoals.toSeq).map { tasks =>
-            val deps = tasks.map((id, task) => id -> Graph.depIdsOf(task))
-            ExecutionPlan(
-                tasks = tasks,
-                deps = deps,
-                goalIds = goals.map(_.id),
-                order = stableOrder(anyGoals)
-            )
-        }
-    end plan
-
-    /** DFS postorder over goals: dependencies before dependents, each id once, goals visited in caller declaration
-      * order.
-      */
-    private def stableOrder(
-        goals: Chunk[AnyTask]
-    ): Chunk[TaskId] =
-        val visited = scala.collection.mutable.Set.empty[TaskId]
-        val result  = Chunk.newBuilder[TaskId]
-
-        def visit(task: AnyTask): Unit =
-            if visited.contains(task.id) then ()
-            else
-                Graph.depsOf(task).foreach(visit)
-                val _ = visited.add(task.id)
-                result.addOne(task.id)
-        end visit
-
-        goals.foreach(visit)
-        result.result()
-    end stableOrder
 
     /** Execute multiple goals under one plan and shared memo; results follow `goals` declaration order.
       */
@@ -111,25 +62,40 @@ private[workflow] object Scheduler:
         Frame
     ): Chunk[A] < (Async & Workflow & Abort[WorkflowError]) =
         for
-            plan <- Abort.get(plan(Chunk.from(goals)))
-            vals <- Abort.recover[Closed](_ =>
-                Abort.fail(WorkflowError.TaskCancelled(TaskId.unsafe("scheduler"), "scope closed"))
-            ) {
-                Scope.run {
-                    for
-                        rt <- Workflow.runtime
-                        cfg = rt.config
-                        meter <- Meter.initSemaphore(concurrency = math.max(1, cfg.parallelism))
-                        state <- AtomicRef.init(ExecState())
-                        _     <- scheduleReady(plan, state, meter)
-                        st    <- state.get
-                        errors = collectedErrors(plan, st)
-                        vals <-
-                            if errors.nonEmpty then Abort.fail(WorkflowError.Partial(errors))
-                            else Kyo.foreach(plan.goalIds)(id => state.get.map(_.results(id).value.asInstanceOf[A]))
-                    yield Chunk.from(vals)
+            plan <- Abort.get(Planner.build(Chunk.from(goals).map(AnyTask(_))))
+            rt <- Workflow.runtime
+            started <- Clock.now
+            stats <- AtomicRef.init(RunStats())
+            _     <- rt.telemetry.publish(WorkflowEvent.RunStarted(plan.goalIds, started.toJava))
+            outcome <- Abort.run[WorkflowError] {
+                Abort.recover[Closed](_ =>
+                    Abort.fail(WorkflowError.TaskCancelled(TaskId.unsafe("scheduler"), "scope closed"))
+                ) {
+                    Scope.run {
+                        for
+                            cfg = rt.config
+                            meter <- Meter.initSemaphore(concurrency = math.max(1, cfg.parallelism))
+                            state <- AtomicRef.init(ExecState())
+                            _     <- scheduleReady(plan, state, meter, stats)
+                            st    <- state.get
+                            errors = collectedErrors(plan, st)
+                            vals <-
+                                if errors.nonEmpty then Abort.fail(WorkflowError.Partial(errors))
+                                else Kyo.foreach(plan.goalIds)(id => state.get.map(_.results(id).value.asInstanceOf[A]))
+                        yield Chunk.from(vals)
+                    }
                 }
             }
+            ended      <- Clock.now
+            finalStats <- stats.get
+            failed = outcome match
+                case Result.Success(_) => finalStats.failed
+                case _                 => math.max(1, finalStats.failed)
+            durationMs = math.max(0L, java.time.Duration.between(started.toJava, ended.toJava).toMillis)
+            _ <- rt.telemetry.publish(
+                WorkflowEvent.RunCompleted(durationMs, finalStats.hits, finalStats.misses, failed)
+            )
+            vals <- Abort.get(outcome)
         yield vals
 
     /** Execute a single goal under the ambient [[Workflow]] runtime. */
@@ -144,7 +110,8 @@ private[workflow] object Scheduler:
     private def scheduleReady(
         plan: ExecutionPlan,
         state: AtomicRef[ExecState],
-        meter: Meter
+        meter: Meter,
+        stats: AtomicRef[RunStats]
     )(using
         Frame
     ): Unit < (Async & Scope & Sync & Workflow & Abort[WorkflowError | Closed]) =
@@ -153,14 +120,14 @@ private[workflow] object Scheduler:
             cfg   = rt.config
             limit = math.max(1, cfg.parallelism)
             claim <- claimReady(plan, state, limit)
-            _     <- Kyo.foreach(claim.cancelled)(error => emitFailure(error.id, error, rt.observer)).unit
+            _     <- Kyo.foreach(claim.cancelled)(error => emitFailure(error.id, error, rt.telemetry, stats)).unit
             _ <-
                 if claim.ready.isEmpty then
-                    if claim.cancelled.nonEmpty then scheduleReady(plan, state, meter)
+                    if claim.cancelled.nonEmpty then scheduleReady(plan, state, meter, stats)
                     else (): Unit < (Async & Scope & Sync & Workflow & Abort[WorkflowError | Closed])
                 else
                     Async.foreach(claim.ready, limit) { id =>
-                        completePlannedNode(plan, id, state, meter, cfg, rt.observer)
+                        completePlannedNode(plan, id, state, meter, cfg, rt.telemetry, stats)
                     }
         yield ()
     end scheduleReady
@@ -207,12 +174,13 @@ private[workflow] object Scheduler:
         state: AtomicRef[ExecState],
         meter: Meter,
         cfg: Workflow.Config,
-        observer: Observer
+        telemetry: WorkflowTelemetry,
+        stats: AtomicRef[RunStats]
     )(using
         Frame
     ): Unit < (Async & Scope & Sync & Workflow & Abort[WorkflowError | Closed]) =
         for
-            outcome <- meter.run(nodeOutcome(id, runPlannedNode(plan, id, state)))
+            outcome <- meter.run(nodeOutcome(id, runPlannedNode(plan, id, state, stats)))
             _ <- outcome match
                 case NodeOutcome.Succeeded(result) =>
                     state.updateAndGet { st =>
@@ -223,7 +191,7 @@ private[workflow] object Scheduler:
                     }.unit
                 case NodeOutcome.Failed(error) =>
                     for
-                        _ <- emitFailure(id, error, observer)
+                        _ <- emitFailure(id, error, telemetry, stats)
                         _ <-
                             if cfg.continueOnError && isContinuable(error) then
                                 state.updateAndGet { st =>
@@ -234,7 +202,7 @@ private[workflow] object Scheduler:
                                 }.unit
                             else Abort.fail(error)
                     yield ()
-            _ <- scheduleReady(plan, state, meter)
+            _ <- scheduleReady(plan, state, meter, stats)
         yield ()
 
     private def nodeOutcome(
@@ -253,15 +221,17 @@ private[workflow] object Scheduler:
     private def emitFailure(
         id: TaskId,
         error: WorkflowError,
-        observer: Observer
+        telemetry: WorkflowTelemetry,
+        stats: AtomicRef[RunStats]
     )(using Frame): Unit < Async =
-        error match
-            case WorkflowError.TaskCancelled(_, reason) =>
-                observer.onEvent(WorkflowEvent.TaskCancelled(id, reason))
-            case WorkflowError.TaskFailed(_, message) =>
-                observer.onEvent(WorkflowEvent.TaskFailed(id, message))
-            case other =>
-                observer.onEvent(WorkflowEvent.TaskFailed(id, other.toString))
+        val event = error match
+            case WorkflowError.TaskCancelled(_, reason) => WorkflowEvent.TaskCancelled(id, reason)
+            case WorkflowError.TaskFailed(_, message)   => WorkflowEvent.TaskFailed(id, message)
+            case other                                  => WorkflowEvent.TaskFailed(id, other.toString)
+        for
+            _ <- telemetry.publish(event)
+            _ <- stats.updateAndGet(s => s.copy(failed = s.failed + 1)).unit
+        yield ()
 
     private def isContinuable(error: WorkflowError): Boolean =
         error match
@@ -287,7 +257,8 @@ private[workflow] object Scheduler:
     private def runPlannedNode(
         plan: ExecutionPlan,
         id: TaskId,
-        state: AtomicRef[ExecState]
+        state: AtomicRef[ExecState],
+        stats: AtomicRef[RunStats]
     )(using
         Frame
     ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
@@ -296,17 +267,17 @@ private[workflow] object Scheduler:
             st <- state.get
             depResults = plan.deps(id).map(st.results(_))
             rt <- Workflow.runtime
-            observer = rt.observer
-            cfg      = rt.config
-            _ <- observer.onEvent(WorkflowEvent.TaskQueued(id))
+            telemetry = rt.telemetry
+            cfg       = rt.config
+            _ <- telemetry.publish(WorkflowEvent.TaskQueued(id))
             result <- task match
-                case src: Task.Source      => runSource(src, observer)
-                case srcs: Task.Sources    => runSources(srcs, observer)
-                case in: Task.Input[?]     => runInput(in, observer)
-                case c: Task.Cached[?]     => runCached(c, depResults, cfg, observer)
-                case p: Task.Persistent[?] => runPersistent(p, depResults, cfg, observer)
-                case a: Task.Activity[?]   => runActivity(a, depResults, observer)
-                case c: Task.Command[?]    => runCommand(c, depResults, observer)
+                case src: Task.Source      => runSource(src, telemetry)
+                case srcs: Task.Sources    => runSources(srcs, telemetry)
+                case in: Task.Input[?]     => runInput(in, telemetry)
+                case c: Task.Cached[?]     => runCached(c, depResults, cfg, telemetry, stats)
+                case p: Task.Persistent[?] => runPersistent(p, depResults, cfg, telemetry, stats)
+                case a: Task.Activity[?]   => runActivity(a, depResults, telemetry)
+                case c: Task.Command[?]    => runCommand(c, depResults, telemetry)
         yield result
     end runPlannedNode
 
@@ -320,13 +291,13 @@ private[workflow] object Scheduler:
       */
     private def runSource(
         src: Task.Source,
-        observer: Observer
+        telemetry: WorkflowTelemetry
     )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
         for
             rt <- Workflow.runtime
             vfs = rt.vfs
             started <- Clock.now
-            _       <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started.toJava))
+            _       <- telemetry.publish(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started.toJava))
             ctx = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(src.id)))
             ref <- runBody[VPathRef](
                 src.id,
@@ -334,20 +305,20 @@ private[workflow] object Scheduler:
                 if src.quick then VPathRef.quick(src.path, vfs)
                 else VPathRef.of(src.path, vfs)
             )
-            _ <- observer.onEvent(WorkflowEvent.TaskCompleted(src.id, ref.fingerprint, 0L))
+            _ <- telemetry.publish(WorkflowEvent.TaskCompleted(src.id, ref.fingerprint, 0L))
         yield NodeResult(ref, ref.fingerprint)
     end runSource
 
     /** Multi-path Source — Mill `Sources` analogue. */
     private def runSources(
         src: Task.Sources,
-        observer: Observer
+        telemetry: WorkflowTelemetry
     )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
         for
             rt <- Workflow.runtime
             vfs = rt.vfs
             started <- Clock.now
-            _       <- observer.onEvent(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started.toJava))
+            _       <- telemetry.publish(WorkflowEvent.TaskStarted(src.id, Chunk.empty, started.toJava))
             ctx = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(src.id)))
             refs <- runBody[Chunk[VPathRef]](
                 src.id,
@@ -358,7 +329,7 @@ private[workflow] object Scheduler:
                 )
             )
             agg = VPathRef.aggregateFingerprint(refs)
-            _ <- observer.onEvent(WorkflowEvent.TaskCompleted(src.id, agg, 0L))
+            _ <- telemetry.publish(WorkflowEvent.TaskCompleted(src.id, agg, 0L))
         yield NodeResult(refs, agg)
     end runSources
 
@@ -366,16 +337,16 @@ private[workflow] object Scheduler:
       */
     private def runInput(
         in: Task.Input[?],
-        observer: Observer
+        telemetry: WorkflowTelemetry
     )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
         for
             rt      <- Workflow.runtime
             started <- Clock.now
-            _       <- observer.onEvent(WorkflowEvent.TaskStarted(in.id, Chunk.empty, started.toJava))
+            _       <- telemetry.publish(WorkflowEvent.TaskStarted(in.id, Chunk.empty, started.toJava))
             ctx = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(in.id)))
             value <- runBody(in.id, ctx, in.read())
             vh = in.hashable.asInstanceOf[Hashable[Any]].hash(value)
-            _ <- observer.onEvent(WorkflowEvent.TaskCompleted(in.id, vh, 0L))
+            _ <- telemetry.publish(WorkflowEvent.TaskCompleted(in.id, vh, 0L))
         yield NodeResult(value, vh)
     end runInput
 
@@ -387,7 +358,8 @@ private[workflow] object Scheduler:
         task: Task.Cached[A],
         depResults: Chunk[NodeResult],
         cfg: Workflow.Config,
-        observer: Observer
+        telemetry: WorkflowTelemetry,
+        stats: AtomicRef[RunStats]
     )(using
         Frame
     ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
@@ -400,16 +372,17 @@ private[workflow] object Scheduler:
             existing <- readManifest(key)
             result <-
                 if cfg.noCache || cfg.bypass.contains(task.id) then
-                    cacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
+                    cacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, telemetry, stats)
                 else
                     existing match
                         case Present(existing) =>
                             readCachedRecord(task, existing, bodyHash, expected).flatMap {
-                                case Present(record) => cacheHit(task, expected, record, observer)
-                                case Absent => cacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
+                                case Present(record) => cacheHit(task, expected, record, telemetry, stats)
+                                case Absent =>
+                                    cacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, telemetry, stats)
                             }
                         case Absent =>
-                            cacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
+                            cacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, telemetry, stats)
         yield result
     end runCached
 
@@ -417,9 +390,12 @@ private[workflow] object Scheduler:
         task: Task.Cached[A],
         expected: Fingerprint,
         record: TaskRecord[A],
-        observer: Observer
+        telemetry: WorkflowTelemetry,
+        stats: AtomicRef[RunStats]
     )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
-        for _ <- observer.onEvent(WorkflowEvent.TaskCached(task.id, expected))
+        for
+            _ <- telemetry.publish(WorkflowEvent.TaskCached(task.id, expected))
+            _ <- stats.updateAndGet(s => s.copy(hits = s.hits + 1)).unit
         yield NodeResult(record.value, record.valueHash)
 
     private def cacheMiss[A](
@@ -430,14 +406,16 @@ private[workflow] object Scheduler:
         expected: Fingerprint,
         key: CacheKey,
         cfg: Workflow.Config,
-        observer: Observer
+        telemetry: WorkflowTelemetry,
+        stats: AtomicRef[RunStats]
     )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
         val depIds = depFps.map(_.id)
         for
+            _ <- stats.updateAndGet(s => s.copy(misses = s.misses + 1)).unit
             rt <- Workflow.runtime
             layout = CacheLayout(rt.cacheRoot)
             started <- Clock.now
-            _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
+            _       <- telemetry.publish(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
             result <- Scope.run:
                 for
                     dest <- layout.openWorkspace(rt.vfs, key)
@@ -448,7 +426,7 @@ private[workflow] object Scheduler:
                 yield value -> vh
             value = result._1
             vh    = result._2
-            _ <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+            _ <- telemetry.publish(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
             _ <-
                 if cfg.readOnly || cfg.noCache then (): Unit < Async
                 else writeRecord(key, task, value, bodyHash, expected, vh)
@@ -462,7 +440,8 @@ private[workflow] object Scheduler:
         task: Task.Persistent[A],
         depResults: Chunk[NodeResult],
         cfg: Workflow.Config,
-        observer: Observer
+        telemetry: WorkflowTelemetry,
+        stats: AtomicRef[RunStats]
     )(using
         Frame
     ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
@@ -475,17 +454,27 @@ private[workflow] object Scheduler:
             existing <- readManifest(key)
             result <-
                 if cfg.noCache || cfg.bypass.contains(task.id) then
-                    persistentCacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
+                    persistentCacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, telemetry, stats)
                 else
                     existing match
                         case Present(existing) =>
                             readPersistentRecord(task, existing, bodyHash, expected).flatMap {
-                                case Present(record) => persistentCacheHit(task, expected, record, observer)
+                                case Present(record) => persistentCacheHit(task, expected, record, telemetry, stats)
                                 case Absent =>
-                                    persistentCacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
+                                    persistentCacheMiss(
+                                        task,
+                                        depArgs,
+                                        depFps,
+                                        bodyHash,
+                                        expected,
+                                        key,
+                                        cfg,
+                                        telemetry,
+                                        stats
+                                    )
                             }
                         case Absent =>
-                            persistentCacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, observer)
+                            persistentCacheMiss(task, depArgs, depFps, bodyHash, expected, key, cfg, telemetry, stats)
         yield result
     end runPersistent
 
@@ -493,9 +482,12 @@ private[workflow] object Scheduler:
         task: Task.Persistent[A],
         expected: Fingerprint,
         record: TaskRecord[A],
-        observer: Observer
+        telemetry: WorkflowTelemetry,
+        stats: AtomicRef[RunStats]
     )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
-        for _ <- observer.onEvent(WorkflowEvent.TaskCached(task.id, expected))
+        for
+            _ <- telemetry.publish(WorkflowEvent.TaskCached(task.id, expected))
+            _ <- stats.updateAndGet(s => s.copy(hits = s.hits + 1)).unit
         yield NodeResult(record.value, record.valueHash)
 
     private def persistentCacheMiss[A](
@@ -506,21 +498,23 @@ private[workflow] object Scheduler:
         expected: Fingerprint,
         key: CacheKey,
         cfg: Workflow.Config,
-        observer: Observer
+        telemetry: WorkflowTelemetry,
+        stats: AtomicRef[RunStats]
     )(using Frame): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
         val depIds = depFps.map(_.id)
         for
+            _ <- stats.updateAndGet(s => s.copy(misses = s.misses + 1)).unit
             rt <- Workflow.runtime
             layout = CacheLayout(rt.cacheRoot)
             result <- Scope.run:
                 for
                     dest    <- layout.openPersistentWorkspace(rt.vfs, key)
                     started <- Clock.now
-                    _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
+                    _       <- telemetry.publish(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
                     ctx = newTaskContext(dest)
                     value <- runBody(task.id, ctx, task.value(ctx, depArgs))
                     vh = task.hashable.hash(value)
-                    _ <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+                    _ <- telemetry.publish(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
                     _ <-
                         if cfg.readOnly || cfg.noCache then (): Unit < Async
                         else writeRecord(key, task, value, bodyHash, expected, vh)
@@ -536,7 +530,7 @@ private[workflow] object Scheduler:
     private def runActivity[A](
         task: Task.Activity[A],
         depResults: Chunk[NodeResult],
-        observer: Observer
+        telemetry: WorkflowTelemetry
     )(using
         Frame
     ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
@@ -544,12 +538,12 @@ private[workflow] object Scheduler:
         val depIds  = depResults.map(r => taskIdOf(task.deps, depResults, r))
         for
             started <- Clock.now
-            _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
+            _       <- telemetry.publish(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
             rt      <- Workflow.runtime
             ctx = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(task.id)))
             value <- runBody(task.id, ctx, task.value(ctx, depArgs))
             vh = task.hashable.hash(value)
-            _ <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+            _ <- telemetry.publish(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
         yield NodeResult(value, vh)
     end runActivity
 
@@ -560,7 +554,7 @@ private[workflow] object Scheduler:
     private def runCommand(
         task: Task.Command[?],
         depResults: Chunk[NodeResult],
-        observer: Observer
+        telemetry: WorkflowTelemetry
     )(using
         Frame
     ): NodeResult < (Async & Workflow & Abort[WorkflowError]) =
@@ -568,12 +562,12 @@ private[workflow] object Scheduler:
         val depIds  = depResults.map(r => taskIdOf(task.deps, depResults, r))
         for
             started <- Clock.now
-            _       <- observer.onEvent(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
+            _       <- telemetry.publish(WorkflowEvent.TaskStarted(task.id, depIds, started.toJava))
             rt      <- Workflow.runtime
             ctx = newTaskContext(CacheLayout(rt.cacheRoot).destPath(CacheKey.fromTaskId(task.id)))
             value <- runBody(task.id, ctx, task.value(ctx, depArgs))
             vh = Fingerprint.unsafe("command:nostore")
-            _ <- observer.onEvent(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
+            _ <- telemetry.publish(WorkflowEvent.TaskCompleted(task.id, vh, 0L))
         yield NodeResult(value, vh)
     end runCommand
 

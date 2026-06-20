@@ -42,4 +42,9 @@ object Observer:
 
     /** Discards every event. Useful for benchmarks and silent runs. */
     object NoOp extends Observer
+
+    extension (observer: Observer)
+
+        def asTelemetry: WorkflowTelemetry =
+            WorkflowTelemetry.fromObserver(observer)
 end Observer

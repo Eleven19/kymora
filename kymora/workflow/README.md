@@ -50,6 +50,10 @@ for the architecture and conventions.
 - `Workflow.run(goal)` / `runAll(goals*)` — engine entry points;
   signatures take `Async & Workflow & Abort[WorkflowError]`. `task()` is
   shorthand for `Workflow.run(task)`.
+- `Workflow.inspect(AnyTask(goal))` / `inspectResult(...)` — static task-graph
+  inspection without executing task bodies. The result is a `WorkflowPlan`
+  containing goal IDs, dependency-before-dependent order, and `TaskDescriptor`
+  metadata for every reachable task.
 - `io.eleven19.kymora.workflow.cli.Cli.runWith(task, tokens)` — bridges
   [kyo-case-app](https://github.com/getkyo/kyo) argument parsing to
   parameterized commands. Provide a case class with `caseapp.Parser` /
@@ -59,9 +63,10 @@ for the architecture and conventions.
 - `CacheStore` — cache-store utility API. Workflow execution uses its runtime
   VFS backend and internal cache layout directly; `VfsDirStore` remains
   available for tests and standalone store use.
-- `WorkflowEvent` + `Observer` — observability stream. The default
-  `ConsoleObserver` / `JsonLinesObserver` write through Kyo's `Console`
-  effect (not `System.out`) so a test runner can capture output.
+- `WorkflowEvent`, `Observer`, and `WorkflowTelemetry` — observability stream.
+  Existing observers still work through `observer.asTelemetry`. Live telemetry
+  adds Hub listeners, snapshots, and a `Signal[WorkflowRunState]` for UIs or
+  reporters.
 
 ## Basic Usage
 
@@ -336,10 +341,47 @@ val recovered =
   yield result
 ```
 
+`Workflow.inspect` returns a static, execution-free plan. It exposes only
+metadata through `TaskDescriptor`; it does not expose task bodies or result
+types.
+
+```scala doctest:expect=skipped
+val source = Task.source("source")(VPath.root / "input.txt")
+val compile = Task.cached("compile")(source) { ref =>
+  ref.fingerprint.value
+}
+
+val plan = Workflow.inspect(AnyTask(compile))
+val compileDescriptor = plan.node(TaskId("compile"))
+```
+
 Observers receive structured `WorkflowEvent`s such as `TaskQueued`,
 `TaskStarted`, `TaskCached`, `TaskCompleted`, and `TaskFailed`. Use
 `Observer.NoOp` for silent runs, `ConsoleObserver` for human-readable output, or
 `JsonLinesObserver` for machine-readable event streams.
+
+`WorkflowTelemetry.live()` provides a scoped event bus for tools that need live
+visibility into execution. Publishing is serialized so event listeners and
+projected snapshots observe the same event order.
+
+```scala doctest:expect=skipped
+Scope.run {
+  for
+    backend <- Vfs.inMemory.init
+    telemetry <- WorkflowTelemetry.live()
+    runtime = Workflow.Runtime(vfs = backend, telemetryOverride = Maybe(telemetry))
+    listener <- telemetry.listen()
+    result <- Workflow.handle(runtime)(Workflow.run(compile))
+    firstEvent <- listener.take
+    snapshot <- telemetry.snapshot
+  yield (result, firstEvent, snapshot)
+}
+```
+
+`WorkflowRunState` is the UI-friendly projection of the event stream. It tracks
+goals, per-task status, cache hit/miss totals, failures, and the ordered event
+history. `WorkflowTelemetry.state` exposes the same projection as a Kyo
+`Signal[WorkflowRunState]`.
 
 ## Examples
 
