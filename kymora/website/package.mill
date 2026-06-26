@@ -4,7 +4,8 @@ import mill.*, scalalib.*, scalajslib.*
 
 trait WebsiteModule extends _root_.build.CommonScalaModule {
     override def sources = Task.Sources(
-        moduleDir / "src"
+        moduleDir / "src",
+        moduleDir / os.up / "shared" / "src"
     )
 
     override def mvnDeps = Seq(
@@ -14,9 +15,21 @@ trait WebsiteModule extends _root_.build.CommonScalaModule {
     )
 }
 
-trait WebsiteTestModule extends _root_.build.CommonScalaTestModule {
+trait WebsiteSharedTestModule extends _root_.build.CommonScalaTestModule {
+    def sharedTestSources = moduleDir / os.up / os.up / "shared" / "test" / "src"
+}
+
+trait WebsiteJvmTestModule extends WebsiteSharedTestModule {
     override def sources = Task.Sources(
-        moduleDir / os.up / os.up / "test" / "src"
+        sharedTestSources,
+        moduleDir / os.up / "test" / "src"
+    )
+}
+
+trait WebsiteJsTestModule extends WebsiteSharedTestModule {
+    override def sources = Task.Sources(
+        sharedTestSources,
+        moduleDir / os.up / "test" / "src"
     )
 }
 
@@ -27,7 +40,44 @@ object jvm extends WebsiteModule {
         mvn"org.scalameta::scalameta::4.13.4"
     )
 
-    object test extends ScalaTests with WebsiteTestModule with _root_.build.KyoTestModule
+    def preview(
+        out: String = "site",
+        repoRoot: String = ".",
+        basePath: String = "",
+        bundleDir: String = "",
+        port: Int = 4242
+    ): Command[Unit] = Task.Command {
+        val bundleReport = build.kymora.`website-bundle`.js.fullLinkJS()
+        val _            = bundleReport
+        if bundleDir.isEmpty then
+            runMain(
+                "io.eleven19.kymora.website.WebsitePreviewMain",
+                "--out",
+                out,
+                "--repo-root",
+                repoRoot,
+                "--base-path",
+                basePath,
+                "--port",
+                port.toString
+            )()
+        else
+            runMain(
+                "io.eleven19.kymora.website.WebsitePreviewMain",
+                "--out",
+                out,
+                "--repo-root",
+                repoRoot,
+                "--base-path",
+                basePath,
+                "--bundle-dir",
+                bundleDir,
+                "--port",
+                port.toString
+            )()
+    }
+
+    object test extends ScalaTests with WebsiteJvmTestModule with _root_.build.KyoTestModule
 }
 
 object js extends WebsiteModule with _root_.build.CommonScalaJSModule {
@@ -35,5 +85,5 @@ object js extends WebsiteModule with _root_.build.CommonScalaJSModule {
         mvn"org.scala-js::scalajs-dom::2.8.0"
     )
 
-    object test extends ScalaJSTests with WebsiteTestModule with _root_.build.KyoTestJSModule
+    object test extends ScalaJSTests with WebsiteJsTestModule with _root_.build.KyoTestJSModule
 }

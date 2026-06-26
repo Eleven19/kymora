@@ -1,5 +1,7 @@
 # Mill
 out/
+site/
+site-preview/
 .mill-remote-cache/
 .bsp/
 .metals/
@@ -12,6 +14,7 @@ out/
 
 # Oh My Claude Code / agent state
 .omc/
+.superpowers/
 .claude/settings.local.json
 .claude/worktrees/
 .claude/scheduled_tasks.lock

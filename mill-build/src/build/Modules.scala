@@ -10,9 +10,9 @@ object KymoraVersions:
     /** Pinned Mill version used by the project wrapper and plugin integration artifact. */
     val Mill: String = "1.2.0-RC1"
 
-    /** Pinned Kyo release candidate. All Kyo modules ship at the same version —
+    /** Pinned Kyo snapshot. All Kyo modules ship at the same version —
       * pinned together here. */
-    val Kyo: String = "1.0.0-RC4"
+    val Kyo: String = "1.0.0-RC4+49-2eafb7d1-SNAPSHOT"
 
     /** Pinned scribe version for cross-platform logging (JVM + JS + Native + Wasm). */
     val Scribe: String = "3.16.1"
@@ -116,7 +116,7 @@ trait KyoTestNativeModule extends KyoTestModule {
 trait KyoTestWasmModule extends KyoTestJSModule
 
 trait CommonScalaJSModule extends ScalaJSModule with scalafmt.ScalafmtModule {
-  def scalaJSVersion = "1.21.0"
+  def scalaJSVersion = "1.22.0"
 
   // CommonJSModule (default: NoModule). Required because kyo-core's
   // `Path` Scala.js backend imports `node:path` and needs a real CJS

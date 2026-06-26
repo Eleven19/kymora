@@ -49,8 +49,12 @@ object jvm extends KyoMillModule {
 
         override def forkEnv = Task {
             val localRepo = jvm.publishLocalTestRepo().path.toIO.getCanonicalFile.toURI.toASCIIString
-            val repos = Seq(localRepo) ++
-                Seq(Task.env.getOrElse("COURSIER_REPOSITORIES", "ivy2Local|central"))
+            val repos = Seq(
+                localRepo,
+                Task.env.getOrElse("COURSIER_REPOSITORIES", "ivy2Local|central"),
+                "https://central.sonatype.com/repository/maven-snapshots/",
+                "https://oss.sonatype.org/content/repositories/snapshots/"
+            )
             Map(
                 "COURSIER_REPOSITORIES" -> repos.mkString("|")
             )

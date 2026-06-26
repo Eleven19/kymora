@@ -7,8 +7,6 @@ import scala.scalajs.js.Thenable.Implicits.*
 
 object WebsiteBundleMain:
 
-    final private case class SearchEntry(title: String, href: String, text: String) derives CanEqual
-
     private val ThemeKey = "kymora-theme"
 
     def main(args: Array[String]): Unit =
@@ -61,7 +59,7 @@ object WebsiteBundleMain:
             val url     = Option(wrap.getAttribute("data-search-index")).getOrElse("latest/search-index.json")
             val base    = basePath(url)
             var loaded  = false
-            var entries = Vector.empty[SearchEntry]
+            var entries = Vector.empty[DocsSearch.Entry]
 
             def update(): Unit =
                 renderSearch(input.value, entries, base, results)
@@ -100,19 +98,18 @@ object WebsiteBundleMain:
                     }
         )
 
-    private def renderSearch(query: String, entries: Vector[SearchEntry], base: String, results: dom.html.Div): Unit =
-        val q = query.trim.toLowerCase(java.util.Locale.ROOT)
+    private def renderSearch(
+        query: String,
+        entries: Vector[DocsSearch.Entry],
+        base: String,
+        results: dom.html.Div
+    ): Unit =
+        val q = query.trim
         if q.isEmpty then
             results.innerHTML = ""
             hide(results)
         else
-            val hits = entries
-                .filter(entry =>
-                    entry.title
-                        .toLowerCase(java.util.Locale.ROOT)
-                        .contains(q) || entry.text.toLowerCase(java.util.Locale.ROOT).contains(q)
-                )
-                .take(8)
+            val hits = DocsSearch.filter(entries, q).take(8)
             results.innerHTML =
                 if hits.isEmpty then """<div class="search-empty">No results</div>"""
                 else
@@ -124,17 +121,17 @@ object WebsiteBundleMain:
                                 )}"><span class="search-result-title">${escapeHtml(
                                     entry.title
                                 )}</span><span class="search-result-text">${escapeHtml(
-                                    snippet(entry.text, q)
+                                    snippet(entry.text, q.toLowerCase(java.util.Locale.ROOT))
                                 )}</span></a>"""
                         )
                         .mkString
             show(results)
 
-    private def parseEntries(json: String): Vector[SearchEntry] =
+    private def parseEntries(json: String): Vector[DocsSearch.Entry] =
         try
             val parsed = js.JSON.parse(json).asInstanceOf[js.Dynamic]
             parsed.entries.asInstanceOf[js.Array[js.Dynamic]].toVector.map { item =>
-                SearchEntry(
+                DocsSearch.Entry(
                     Option(item.title.asInstanceOf[String]).getOrElse(""),
                     Option(item.href.asInstanceOf[String]).getOrElse(""),
                     Option(item.text.asInstanceOf[String]).getOrElse("")
