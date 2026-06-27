@@ -65,7 +65,7 @@ for the architecture and conventions.
   available for tests and standalone store use.
 - `WorkflowEvent`, `Observer`, and `WorkflowTelemetry` — observability stream.
   Existing observers still work through `observer.asTelemetry`. Live telemetry
-  adds Hub listeners, snapshots, and a `Signal[WorkflowRunState]` for UIs or
+  adds subscriptions, snapshots, and a `Signal[WorkflowRunState]` for UIs or
   reporters.
 
 ## Basic Usage
@@ -361,7 +361,7 @@ Observers receive structured `WorkflowEvent`s such as `TaskQueued`,
 `JsonLinesObserver` for machine-readable event streams.
 
 `WorkflowTelemetry.live()` provides a scoped event bus for tools that need live
-visibility into execution. Publishing is serialized so event listeners and
+visibility into execution. Publishing is serialized so event subscriptions and
 projected snapshots observe the same event order.
 
 ```scala doctest:expect=skipped
@@ -370,9 +370,9 @@ Scope.run {
     backend <- Vfs.inMemory.init
     telemetry <- WorkflowTelemetry.live()
     runtime = Workflow.Runtime(vfs = backend, telemetryOverride = Maybe(telemetry))
-    listener <- telemetry.listen()
+    subscription <- telemetry.subscribe()
     result <- Workflow.handle(runtime)(Workflow.run(compile))
-    firstEvent <- listener.take
+    firstEvent <- subscription.take
     snapshot <- telemetry.snapshot
   yield (result, firstEvent, snapshot)
 }

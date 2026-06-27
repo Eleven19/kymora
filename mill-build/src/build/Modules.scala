@@ -17,6 +17,9 @@ object KymoraVersions:
     /** Pinned scribe version for cross-platform logging (JVM + JS + Native + Wasm). */
     val Scribe: String = "3.16.1"
 
+    /** Pinned Scala Native version. Keep aligned with the published Kyo native snapshot artifacts. */
+    val ScalaNative: String = "0.5.12"
+
 trait CommonScalaModule extends ScalaModule with scalafmt.ScalafmtModule {
   override def scalaVersion = Task {
     "3.8.4"
@@ -162,5 +165,5 @@ trait CommonScalaJSWasmModule extends CommonScalaJSModule {
 }
 
 trait CommonScalaNativeModule extends ScalaNativeModule with scalafmt.ScalafmtModule {
-  def scalaNativeVersion = "0.5.11"
+  def scalaNativeVersion = KymoraVersions.ScalaNative
 }

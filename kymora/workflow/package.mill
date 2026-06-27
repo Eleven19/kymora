@@ -10,6 +10,7 @@ trait WorkflowModule extends _root_.build.CommonScalaModule
 
     def mvnDeps = Seq(
         mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-actor::${_root_.build.KymoraVersions.Kyo}",
         mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
         mvn"io.getkyo::kyo-case-app::${_root_.build.KymoraVersions.Kyo}",
         // Pure-Scala BLAKE3 — cross-platform (JVM / Scala.js / Wasm / Scala Native)
@@ -44,6 +45,7 @@ object wasm extends WorkflowModule with _root_.build.CommonScalaJSWasmModule {
     override def moduleDeps = Seq(build.kymora.vfs.wasm)
     override def mvnDeps = Seq(
         mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo:kyo-actor_sjs1_3:${_root_.build.KymoraVersions.Kyo}",
         mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}",
         mvn"io.getkyo::kyo-case-app::${_root_.build.KymoraVersions.Kyo}",
         mvn"pt.kcry:blake3_sjs1_3:3.1.2"

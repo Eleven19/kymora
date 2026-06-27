@@ -11,14 +11,22 @@ trait WorkflowTelemetry:
     def state(using Frame): Signal[WorkflowRunState] < Sync =
         Signal.initConst(WorkflowRunState.empty)
 
-    def listen(bufferSize: Int = WorkflowTelemetry.DefaultBufferSize)(using
+    def subscribe(bufferSize: Int = WorkflowTelemetry.DefaultBufferSize)(using
         frame: Frame
-    ): Hub.Listener[WorkflowEvent] < (Sync & Scope & Abort[Closed]) =
-        Abort.fail(Closed("WorkflowTelemetry.listen", frame))
+    ): WorkflowTelemetry.Subscription < (Async & Scope & Abort[Closed]) =
+        Abort.fail(Closed("WorkflowTelemetry.subscribe", frame))
 end WorkflowTelemetry
 
 object WorkflowTelemetry:
     val DefaultBufferSize: Int = 4096
+
+    trait Subscription:
+        def take(using Frame): WorkflowEvent < (Async & Abort[Closed])
+
+        def takeExactly(n: Int)(using Frame): Chunk[WorkflowEvent] < (Async & Abort[Closed])
+
+        def drainUpTo(max: Int)(using Frame): Chunk[WorkflowEvent] < (Sync & Abort[Closed])
+    end Subscription
 
     object NoOp extends WorkflowTelemetry:
 
@@ -32,5 +40,5 @@ object WorkflowTelemetry:
                 observer.onEvent(event)
 
     def live(bufferSize: Int = DefaultBufferSize)(using Frame): WorkflowTelemetry < (Async & Scope) =
-        _root_.io.eleven19.kymora.workflow.internal.HubWorkflowTelemetry.init(bufferSize)
+        _root_.io.eleven19.kymora.workflow.internal.PubSubWorkflowTelemetry.init(bufferSize)
 end WorkflowTelemetry

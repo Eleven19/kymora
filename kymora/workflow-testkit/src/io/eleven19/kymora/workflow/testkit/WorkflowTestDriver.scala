@@ -58,55 +58,13 @@ object WorkflowTestDriver:
             vfs      <- Vfs.inMemory.init
             store    <- VfsDirStore.init(VPath("cache"), vfs)
             observer <- CollectingObserver.init
-            live     <- TestWorkflowTelemetry.init
+            live     <- WorkflowTelemetry.live()
             serial   <- Meter.initMutexUnscoped
             telemetry = FanoutWorkflowTelemetry(live, observer.asTelemetry, serial)
             cfg       = Workflow.Config.default.copy(parallelism = 1)
         yield new WorkflowTestDriver(cfg, vfs, store, observer, telemetry)
 
 end WorkflowTestDriver
-
-final private class TestWorkflowTelemetry private (
-    hub: Hub[WorkflowEvent],
-    stateRef: SignalRef[WorkflowRunState],
-    serial: Meter
-) extends WorkflowTelemetry:
-
-    override def publish(event: WorkflowEvent)(using Frame): Unit < Async =
-        Abort.recover[Closed](_ => ())(serial.run {
-            for
-                published <- Abort.run[Closed](hub.put(event))
-                _ <- published match
-                    case Result.Success(_) =>
-                        stateRef.updateAndGet(_.applyEvent(event)).unit
-                    case Result.Failure(_) =>
-                        Kyo.unit
-                    case Result.Panic(ex) =>
-                        Abort.panic(ex)
-            yield ()
-        })
-
-    override def snapshot(using Frame): WorkflowRunState < Async =
-        stateRef.current
-
-    override def state(using Frame): Signal[WorkflowRunState] < Sync =
-        stateRef
-
-    override def listen(bufferSize: Int)(using
-        Frame
-    ): Hub.Listener[WorkflowEvent] < (Sync & Scope & Abort[Closed]) =
-        hub.listen(bufferSize)
-
-end TestWorkflowTelemetry
-
-private object TestWorkflowTelemetry:
-
-    def init(using Frame): WorkflowTelemetry < (Sync & Scope) =
-        for
-            hub      <- Hub.init[WorkflowEvent](WorkflowTelemetry.DefaultBufferSize)
-            stateRef <- Signal.initRef(WorkflowRunState.empty)
-            serial   <- Meter.initMutexUnscoped
-        yield new TestWorkflowTelemetry(hub, stateRef, serial)
 
 final private class FanoutWorkflowTelemetry(
     live: WorkflowTelemetry,
@@ -124,9 +82,9 @@ final private class FanoutWorkflowTelemetry(
     override def state(using Frame): Signal[WorkflowRunState] < Sync =
         live.state
 
-    override def listen(bufferSize: Int)(using
+    override def subscribe(bufferSize: Int)(using
         frame: Frame
-    ): Hub.Listener[WorkflowEvent] < (Sync & Scope & Abort[Closed]) =
-        live.listen(bufferSize)
+    ): WorkflowTelemetry.Subscription < (Async & Scope & Abort[Closed]) =
+        live.subscribe(bufferSize)
 
 end FanoutWorkflowTelemetry

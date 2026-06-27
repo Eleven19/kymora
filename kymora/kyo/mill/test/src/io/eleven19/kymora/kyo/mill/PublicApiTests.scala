@@ -21,6 +21,7 @@ object PublicApiTests extends TestSuite:
         test("default Kyo version matches the repository pin") {
             assert(KyoMillDefaults.kyoVersion == "1.0.0-RC4+49-2eafb7d1-SNAPSHOT")
             assert(KyoMillDefaults.scalaJSVersion == "1.22.0")
+            assert(KyoMillDefaults.scalaNativeVersion == "0.5.12")
         }
 
         test("public API exposes Mill-native Kyo test and Wasm traits") {

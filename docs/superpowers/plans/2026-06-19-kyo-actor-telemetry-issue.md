@@ -1,5 +1,8 @@
 # Kyo Actor Issue Draft: Safe Request/Ack Publishing For Scoped Actors
 
+> Historical note: the Kyo actor issue described here was resolved upstream and
+> Kymora replaced this workaround in `2026-06-27-workflow-telemetry-pubsub.md`.
+
 Filed upstream as getkyo/kyo#1688: <https://github.com/getkyo/kyo/issues/1688>.
 Kymora follow-up issue: Eleven19/kymora#30: <https://github.com/Eleven19/kymora/issues/30>.
 
