@@ -19,6 +19,7 @@ site-preview/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 .worktrees/
+.dev/
 
 # OS
 .DS_Store

@@ -1,0 +1,35 @@
+package build.kymora.eventlog
+
+import mill.*, scalalib.*, scalajslib.*, scalanativelib.*
+
+trait EventLogModule extends _root_.build.CommonScalaModule
+    with _root_.build.KymoraPlatformScalaModule
+    with _root_.build.PublishSupport {
+
+    override def artifactName = "kymora-eventlog"
+
+    def mvnDeps = Seq(
+        mvn"io.getkyo::kyo-core::${_root_.build.KymoraVersions.Kyo}",
+        mvn"io.getkyo::kyo-schema::${_root_.build.KymoraVersions.Kyo}"
+    )
+}
+
+trait EventLogTestModule extends _root_.build.CommonScalaTestModule {
+    override def sources = Task.Sources(moduleDir / os.up / "test" / "src")
+}
+
+object jvm extends EventLogModule {
+    object test extends ScalaTests with EventLogTestModule with _root_.build.KyoTestModule
+}
+
+object js extends EventLogModule with _root_.build.CommonScalaJSModule {
+    object test extends ScalaJSTests with EventLogTestModule with _root_.build.KyoTestJSModule
+}
+
+object wasm extends EventLogModule with _root_.build.CommonScalaJSWasmModule {
+    object test extends ScalaJSTests with EventLogTestModule with _root_.build.KyoTestWasmModule
+}
+
+object native extends EventLogModule with _root_.build.CommonScalaNativeModule {
+    object test extends ScalaNativeTests with EventLogTestModule with _root_.build.KyoTestNativeModule
+}
