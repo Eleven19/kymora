@@ -8,4 +8,4 @@ package io.eleven19.kymora.kyo.mill
 object KyoMillDefaults:
     val kyoVersion: String         = "1.0.0-RC4+49-2eafb7d1-SNAPSHOT"
     val scalaJSVersion: String     = "1.22.0"
-    val scalaNativeVersion: String = "0.5.11"
+    val scalaNativeVersion: String = "0.5.12"

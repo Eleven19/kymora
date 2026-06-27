@@ -60,16 +60,19 @@ class WorkflowTestDriverTests extends Test[Any]:
       assert(snapshot.events == events)
   }
 
-  "WorkflowTestDriver telemetry supports listeners" in {
-    val event = WorkflowEvent.TaskQueued(TaskId("listened"))
+  "WorkflowTestDriver telemetry supports subscriptions" in {
+    val event = WorkflowEvent.TaskQueued(TaskId("driver-subscription"))
 
     Scope.run {
       for
-        driver   <- WorkflowTestDriver.init
-        listener <- driver.telemetry.listen()
-        _        <- driver.telemetry.publish(event)
-        seen     <- listener.take
-      yield assert(seen == event)
+        driver       <- WorkflowTestDriver.init
+        subscription <- driver.telemetry.subscribe(bufferSize = 8)
+        _            <- driver.telemetry.publish(event)
+        seen         <- subscription.take
+        events       <- driver.events
+      yield
+        assert(seen == event)
+        assert(events == Chunk(event))
     }
   }
 end WorkflowTestDriverTests

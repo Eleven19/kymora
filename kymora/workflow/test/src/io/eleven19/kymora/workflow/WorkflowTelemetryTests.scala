@@ -22,20 +22,47 @@ class WorkflowTelemetryTests extends Test[Any]:
         yield assert(true)
     }
 
-    "live fans out published events to two listeners" in {
+    "live fans out published events to two subscribers" in {
         val first  = WorkflowEvent.TaskQueued(TaskId("compile"))
         val second = WorkflowEvent.TaskFailed(TaskId("test"), "boom")
 
         Scope.run {
             for
-                telemetry <- WorkflowTelemetry.live(bufferSize = 8)
-                left      <- telemetry.listen(bufferSize = 8)
-                right     <- telemetry.listen(bufferSize = 8)
-                _         <- telemetry.publish(first)
-                _         <- telemetry.publish(second)
-                leftSeen  <- left.takeExactly(2)
-                rightSeen <- right.takeExactly(2)
+                telemetry  <- WorkflowTelemetry.live(bufferSize = 8)
+                left       <- telemetry.subscribe(bufferSize = 8)
+                right      <- telemetry.subscribe(bufferSize = 8)
+                _          <- telemetry.publish(first)
+                _          <- telemetry.publish(second)
+                leftSeen   <- left.takeExactly(2)
+                rightSeen  <- right.takeExactly(2)
             yield assert(leftSeen == Chunk(first, second) && rightSeen == Chunk(first, second))
+        }
+    }
+
+    "live exposes a read-only subscription handle" in {
+        val event = WorkflowEvent.TaskQueued(TaskId("subscribe-api"))
+
+        Scope.run {
+            for
+                telemetry    <- WorkflowTelemetry.live(bufferSize = 8)
+                subscription <- telemetry.subscribe(bufferSize = 8)
+                _            <- telemetry.publish(event)
+                seen         <- subscription.take
+            yield assert(seen == event)
+        }
+    }
+
+    "live prunes closed subscriptions without blocking live subscriptions" in {
+        val event = WorkflowEvent.TaskQueued(TaskId("live-subscription"))
+
+        Scope.run {
+            for
+                telemetry <- WorkflowTelemetry.live(bufferSize = 8)
+                _         <- Scope.run(telemetry.subscribe(bufferSize = 8))
+                live      <- telemetry.subscribe(bufferSize = 8)
+                _         <- telemetry.publish(event)
+                seen      <- live.take
+            yield assert(seen == event)
         }
     }
 
@@ -89,16 +116,16 @@ class WorkflowTelemetryTests extends Test[Any]:
         }
     }
 
-    "live keeps listener and snapshot event order aligned for concurrent publishers" in {
+    "live keeps subscription and snapshot event order aligned for concurrent publishers" in {
         val events = Chunk.from((0 until 64).map(i => WorkflowEvent.TaskQueued(TaskId.unsafe(s"task-$i"))))
 
         Scope.run {
             for
-                telemetry <- WorkflowTelemetry.live(bufferSize = 128)
-                listener  <- telemetry.listen(bufferSize = 128)
-                _         <- Async.foreach(events, concurrency = events.size)(telemetry.publish)
-                seen      <- listener.takeExactly(events.size)
-                snapshot  <- telemetry.snapshot
+                telemetry    <- WorkflowTelemetry.live(bufferSize = 128)
+                subscription <- telemetry.subscribe(bufferSize = 128)
+                _            <- Async.foreach(events, concurrency = events.size)(telemetry.publish)
+                seen         <- subscription.takeExactly(events.size)
+                snapshot     <- telemetry.snapshot
             yield
                 assert(seen == snapshot.events)
                 assert(seen.toSet == events.toSet)
