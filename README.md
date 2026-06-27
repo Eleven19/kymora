@@ -3,10 +3,9 @@
 # kymora
 
 Kymora provides cross-platform extensions for the
-[Kyo](https://github.com/getkyo/kyo) effect system. The current modules focus
-on virtual filesystem access and workflow/task execution: programs describe the
+[Kyo](https://github.com/getkyo/kyo) effect system. Programs describe the
 effects they need, and callers choose concrete runtimes such as in-memory,
-host-backed, or mounted filesystems.
+host-backed, mounted, or journal backends.
 
 ## Modules
 
@@ -15,6 +14,7 @@ host-backed, or mounted filesystems.
 | Module | JVM | JS | Native | WASM | Identity |
 | --- | --- | --- | --- | --- | --- |
 | [`kymora-vfs`](kymora/vfs/README.md) | ✅ | ✅ | ✅ | ✅ | Kyo effects for read-only and writable virtual filesystem access over host, in-memory, and mounted backends. |
+| [`kymora-eventlog`](kymora/eventlog/README.md) | ✅ | ✅ | ✅ | ✅ | Kyo-native event journal effect with byte payloads, optimistic concurrency, metadata, and in-memory backend. |
 | [`kymora-workflow`](kymora/workflow/README.md) | ✅ | ✅ | ✅ | ✅ | Kyo-native DAG task-graph engine with Mill-aligned incremental caching. |
 | [`kymora-workflow-testkit`](kymora/workflow-testkit/README.md) | ✅ | ✅ | ✅ | ✅ | Published workflow test helpers: in-memory cache, fake clock, event capture, and graph ObjectMothers. |
 

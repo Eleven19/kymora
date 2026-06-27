@@ -3,5 +3,6 @@ artifactName: kymora
 moduleDeps:
   - build.kymora.kyo.mill.jvm
   - build.kymora.vfs.jvm
+  - build.kymora.eventlog.jvm
   - build.kymora.workflow.jvm
   - build.kymora.workflow-testkit.jvm
