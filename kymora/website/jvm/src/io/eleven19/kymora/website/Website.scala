@@ -1,46 +1,31 @@
 package io.eleven19.kymora.website
 
 import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.URI
+import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDate
 import java.util.Comparator
+import com.sun.net.httpserver.HttpExchange
+import com.sun.net.httpserver.HttpServer
 import scala.jdk.CollectionConverters.*
 import scala.meta.*
 import scala.meta.tokens.Token as MetaToken
 import scala.util.matching.Regex
 import scala.sys.process.*
 
-final class WebsiteException(message: String, cause: Throwable | Null = null) extends RuntimeException(message, cause)
-
-final case class WebsiteVersion(tag: String, label: String, latest: Boolean) derives CanEqual
-
-final case class WebsiteModule(
-    slug: String,
-    group: String,
-    title: String,
-    target: String,
-    readme: String,
-    summary: String,
-    platforms: WebsiteModule.Platforms
-) derives CanEqual
-
-object WebsiteModule:
-    final case class Platforms(jvm: Boolean, js: Boolean, native: Boolean, wasm: Boolean) derives CanEqual
-
-final case class WebsiteContent(
-    intro: String,
-    groups: Vector[WebsiteContent.Group],
-    version: WebsiteVersion
-) derives CanEqual
-
-object WebsiteContent:
-    final case class Group(name: String, modules: Vector[WebsiteModule]) derives CanEqual
+object WebsiteContentLoader:
 
     def fromRepo(root: Path, version: WebsiteVersion): WebsiteContent =
         val readme = readRequired(root.resolve("README.md"))
-        WebsiteContent(readme, parseGroups(root, readme), version)
+        WebsiteContent.fromReadmes(
+            readme,
+            version,
+            target => Some(readRequired(root.resolve(target).normalize()))
+        )
 
     private def readRequired(path: Path): String =
         try Files.readString(path, StandardCharsets.UTF_8)
@@ -48,103 +33,7 @@ object WebsiteContent:
             case _: IOException =>
                 throw new WebsiteException(s"missing README: $path")
 
-    private def parseGroups(root: Path, readme: String): Vector[Group] =
-        sectionBody(readme, "## Modules") match
-            case None => Vector.empty
-            case Some(body) =>
-                splitGroups(body).map { case (name, lines) =>
-                    val rows     = lines.filter(_.trim.startsWith("|"))
-                    val dataRows = rows.filterNot(isSeparatorRow).drop(1)
-                    val modules  = dataRows.flatMap(row => parseModule(root, name, row))
-                    val hasTable = rows.size >= 2 && rows.exists(isSeparatorRow)
-                    if !hasTable then throw new WebsiteException(s"malformed module table for group: $name")
-                    else Group(name, modules)
-                }
-
-    private def sectionBody(text: String, marker: String): Option[String] =
-        val lines = text.linesIterator.toVector
-        val start = lines.indexWhere(_.trim == marker)
-        if start < 0 then None
-        else
-            val rest = lines.drop(start + 1)
-            val end  = rest.indexWhere(line => line.startsWith("## ") && line.trim != marker)
-            Some((if end >= 0 then rest.take(end) else rest).mkString("\n"))
-
-    private def splitGroups(body: String): Vector[(String, Vector[String])] =
-        val (closed, openName, openLines) =
-            body.linesIterator.foldLeft(
-                (Vector.empty[(String, Vector[String])], Option.empty[String], Vector.empty[String])
-            ) {
-                case ((acc, current, lines), line) if line.startsWith("### ") =>
-                    val closedAcc = current.fold(acc)(name => acc :+ (name -> lines))
-                    (closedAcc, Some(line.stripPrefix("### ").trim), Vector.empty[String])
-                case ((acc, Some(name), lines), line) =>
-                    (acc, Some(name), lines :+ line)
-                case (state, _) =>
-                    state
-            }
-        openName.fold(closed)(name => closed :+ (name -> openLines))
-
-    private def parseModule(root: Path, group: String, row: String): Option[WebsiteModule] =
-        val cells = pipeCells(row)
-        if cells.size < 5 then throw new WebsiteException(s"malformed module table row: $row")
-        val link = parseLink(cells.head).getOrElse(throw new WebsiteException(s"malformed module link: ${cells.head}"))
-        if !link.target.endsWith("README.md") then None
-        else
-            val readmePath = root.resolve(link.target).normalize()
-            Some(
-                WebsiteModule(
-                    slug = slug(link.label),
-                    group = group,
-                    title = link.label,
-                    target = link.target,
-                    readme = readRequired(readmePath),
-                    summary = cells.lift(5).map(stripBackticks).getOrElse(""),
-                    platforms = WebsiteModule.Platforms(
-                        jvm = supported(cells(1)),
-                        js = supported(cells(2)),
-                        native = supported(cells(3)),
-                        wasm = cells.size >= 6 && supported(cells(4))
-                    )
-                )
-            )
-
-    final private case class Link(label: String, target: String)
-
-    private def parseLink(cell: String): Option[Link] =
-        val openBracket  = cell.indexOf('[')
-        val closeBracket = cell.indexOf(']', openBracket + 1)
-        val openParen    = cell.indexOf('(', closeBracket + 1)
-        val closeParen   = cell.indexOf(')', openParen + 1)
-        if openBracket < 0 || closeBracket < 0 || openParen < 0 || closeParen < 0 then None
-        else
-            Some(
-                Link(
-                    stripBackticks(cell.substring(openBracket + 1, closeBracket)),
-                    cell.substring(openParen + 1, closeParen)
-                )
-            )
-
-    private def stripBackticks(text: String): String =
-        text.stripPrefix("`").stripSuffix("`")
-
-    private def slug(label: String): String =
-        label.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "-").stripPrefix("-").stripSuffix("-")
-
-    private def supported(cell: String): Boolean =
-        val normalized = cell.trim.toLowerCase(java.util.Locale.ROOT)
-        normalized == "✅" || normalized == "yes" || normalized == "true" || normalized == "y" || normalized == "✓"
-
-    private def isSeparatorRow(line: String): Boolean =
-        val cells = pipeCells(line)
-        cells.nonEmpty && cells.forall(cell => cell.nonEmpty && cell.forall(ch => ch == '-' || ch == ':'))
-
-    private def pipeCells(line: String): Vector[String] =
-        val trimmed = line.trim
-        if !trimmed.startsWith("|") then Vector.empty
-        else trimmed.stripPrefix("|").stripSuffix("|").split("\\|", -1).toVector.map(_.trim)
-
-object WebsiteVersion:
+object WebsiteVersions:
 
     def current(repoRoot: Path): WebsiteVersion =
         latestTag(repoRoot) match
@@ -163,22 +52,8 @@ object WebsiteVersion:
                 "--format=%(refname:short)",
                 "refs/tags/v[0-9]*"
             ).!!(logger)
-            out.linesIterator.find(parse(_).isDefined)
+            out.linesIterator.find(WebsiteVersion.parse(_).isDefined)
         catch case _: Throwable => None
-
-    def parse(tag: String): Option[(Int, Int, Int, String)] =
-        val Pattern = """^v(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-(.+))?$""".r
-        tag match
-            case Pattern(major, minor, patch, pre) =>
-                Some(
-                    (
-                        major.toInt,
-                        Option(minor).fold(0)(_.toInt),
-                        Option(patch).fold(0)(_.toInt),
-                        Option(pre).getOrElse("")
-                    )
-                )
-            case _ => None
 
 object WebsiteGenerator:
     final case class Config(repoRoot: Path, bundleDir: Path, basePath: String) derives CanEqual
@@ -722,13 +597,10 @@ object WebsiteGenerator:
         s"""{"version":${json(content.version.label)},"prefix":${json(prefix)},"groups":$groups}"""
 
     private def searchJson(prefix: String, content: WebsiteContent): String =
-        val entries = content.groups
-            .flatMap(_.modules)
-            .map(module =>
-                s"""{"title":${json(module.title)},"href":${json(s"/$prefix/${module.slug}/")},"text":${json(
-                        stripMarkdown(module.readme)
-                    )}}"""
-            )
+        val entries = DocsSearch
+            .indexFor(prefix, content)
+            .entries
+            .map(entry => s"""{"title":${json(entry.title)},"href":${json(entry.href)},"text":${json(entry.text)}}""")
             .mkString("[", ",", "]")
         s"""{"entries":$entries}"""
 
@@ -754,9 +626,6 @@ object WebsiteGenerator:
         Vector("JVM" -> p.jvm, "JS" -> p.js, "Native" -> p.native, "WASM" -> p.wasm)
             .collect { case (name, true) => name }
             .mkString(" · ")
-
-    private def stripMarkdown(text: String): String =
-        text.linesIterator.filterNot(_.startsWith("#")).mkString(" ")
 
     private def anchor(text: String): String =
         text.trim.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "-").stripPrefix("-").stripSuffix("-")
@@ -898,8 +767,8 @@ object WebsiteMain:
         val bundleDir =
             Path.of(parsed.getOrElse("--bundle-dir", discoverBundleDir(repoRoot).toString)).toAbsolutePath.normalize()
         val basePath = parsed.getOrElse("--base-path", "")
-        val version  = WebsiteVersion.current(repoRoot)
-        val current  = WebsiteContent.fromRepo(repoRoot, version)
+        val version  = WebsiteVersions.current(repoRoot)
+        val current  = WebsiteContentLoader.fromRepo(repoRoot, version)
         val appended =
             parsed.get("--content").fold(Vector.empty[WebsiteContent])(dir => loadSnapshots(Path.of(dir), version.tag))
         WebsiteGenerator.emit(appended :+ current, out, WebsiteGenerator.Config(repoRoot, bundleDir, basePath))
@@ -922,7 +791,7 @@ object WebsiteMain:
                 )
                 .sortBy(_.getFileName.toString)
                 .map(path =>
-                    WebsiteContent.fromRepo(
+                    WebsiteContentLoader.fromRepo(
                         path,
                         WebsiteVersion(
                             path.getFileName.toString,
@@ -931,6 +800,85 @@ object WebsiteMain:
                         )
                     )
                 )
+
+    private def discoverBundleDir(repoRoot: Path): Path =
+        val bundleRoot = repoRoot.resolve("out/kymora/website-bundle/js/fullLinkJS.dest")
+        if Files.isDirectory(bundleRoot) then bundleRoot
+        else repoRoot.resolve("kymora/website-bundle/js/target/scala-3.8.4/kymora-website-bundle-opt")
+
+object WebsitePreview:
+
+    def resolve(root: Path, uri: URI, basePath: String): Path =
+        val normalizedRoot = root.toAbsolutePath.normalize()
+        val rawPath        = Option(uri.getRawPath).getOrElse("/")
+        val decoded        = URLDecoder.decode(rawPath, StandardCharsets.UTF_8)
+        val strippedBase =
+            val normalizedBase = basePath.stripSuffix("/")
+            if normalizedBase.nonEmpty && decoded.startsWith(normalizedBase + "/") then
+                decoded.drop(normalizedBase.length)
+            else if normalizedBase.nonEmpty && decoded == normalizedBase then "/"
+            else decoded
+        val relativePath =
+            val stripped = strippedBase.stripPrefix("/")
+            if stripped.isEmpty then "index.html"
+            else if stripped.endsWith("/") then stripped + "index.html"
+            else stripped
+        val candidate = normalizedRoot.resolve(relativePath).normalize()
+        if candidate.startsWith(normalizedRoot) then candidate else normalizedRoot.resolve("404.html")
+
+    def serve(root: Path, basePath: String, port: Int): HttpServer =
+        val normalizedRoot = root.toAbsolutePath.normalize()
+        val server         = HttpServer.create(InetSocketAddress("127.0.0.1", port), 0)
+        server.createContext(
+            "/",
+            exchange =>
+                val resolved = resolve(normalizedRoot, exchange.getRequestURI, basePath)
+                val file =
+                    if Files.isRegularFile(resolved) then resolved
+                    else if Files.isDirectory(resolved) && Files.isRegularFile(resolved.resolve("index.html")) then
+                        resolved.resolve("index.html")
+                    else normalizedRoot.resolve("404.html")
+                if Files.isRegularFile(file) then send(exchange, 200, contentType(file), Files.readAllBytes(file))
+                else send(exchange, 404, "text/plain; charset=utf-8", "Not found".getBytes(StandardCharsets.UTF_8))
+        )
+        server
+
+    private def send(exchange: HttpExchange, status: Int, contentType: String, bytes: Array[Byte]): Unit =
+        exchange.getResponseHeaders.set("Content-Type", contentType)
+        exchange.sendResponseHeaders(status, bytes.length.toLong)
+        val body = exchange.getResponseBody
+        try body.write(bytes)
+        finally body.close()
+
+    private def contentType(path: Path): String =
+        path.getFileName.toString match
+            case name if name.endsWith(".html") => "text/html; charset=utf-8"
+            case name if name.endsWith(".js")   => "text/javascript; charset=utf-8"
+            case name if name.endsWith(".json") => "application/json; charset=utf-8"
+            case name if name.endsWith(".svg")  => "image/svg+xml"
+            case name if name.endsWith(".css")  => "text/css; charset=utf-8"
+            case name if name.endsWith(".xml")  => "application/xml; charset=utf-8"
+            case _                              => "application/octet-stream"
+
+object WebsitePreviewMain:
+
+    def main(args: Array[String]): Unit =
+        val parsed   = parseArgs(args.toVector)
+        val repoRoot = Path.of(parsed.getOrElse("--repo-root", ".")).toAbsolutePath.normalize()
+        val out      = Path.of(parsed.getOrElse("--out", "site")).toAbsolutePath.normalize()
+        val bundleDir =
+            Path.of(parsed.getOrElse("--bundle-dir", discoverBundleDir(repoRoot).toString)).toAbsolutePath.normalize()
+        val basePath = parsed.getOrElse("--base-path", "")
+        val port     = parsed.get("--port").flatMap(_.toIntOption).getOrElse(4242)
+        val content  = WebsiteContentLoader.fromRepo(repoRoot, WebsiteVersions.current(repoRoot))
+        WebsiteGenerator.emit(Seq(content), out, WebsiteGenerator.Config(repoRoot, bundleDir, basePath))
+        val server = WebsitePreview.serve(out, basePath, port)
+        server.start()
+        println(s"WebsitePreviewMain: serving $out at http://127.0.0.1:$port${basePath.stripSuffix("/")}/")
+        Thread.currentThread.join()
+
+    private def parseArgs(args: Vector[String]): Map[String, String] =
+        args.sliding(2, 1).collect { case Vector(flag, value) if flag.startsWith("--") => flag -> value }.toMap
 
     private def discoverBundleDir(repoRoot: Path): Path =
         val bundleRoot = repoRoot.resolve("out/kymora/website-bundle/js/fullLinkJS.dest")

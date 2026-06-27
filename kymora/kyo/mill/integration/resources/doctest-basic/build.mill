@@ -1,5 +1,5 @@
 //| mvnDeps:
-//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+//| - io.eleven19.kymora::kymora-kyo-mill::0.2.0-SNAPSHOT
 package build
 
 import mill.*, scalalib.*

@@ -6,6 +6,6 @@ package io.eleven19.kymora.kyo.mill
   * Scala.js, or Scala Native version.
   */
 object KyoMillDefaults:
-    val kyoVersion: String         = "1.0.0-RC4"
-    val scalaJSVersion: String     = "1.21.0"
+    val kyoVersion: String         = "1.0.0-RC4+49-2eafb7d1-SNAPSHOT"
+    val scalaJSVersion: String     = "1.22.0"
     val scalaNativeVersion: String = "0.5.11"

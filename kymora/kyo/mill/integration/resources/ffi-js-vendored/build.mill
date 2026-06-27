@@ -1,5 +1,5 @@
 //| mvnDeps:
-//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+//| - io.eleven19.kymora::kymora-kyo-mill::0.2.0-SNAPSHOT
 package build
 
 import io.eleven19.kymora.kyo.mill.ffi.*
@@ -8,7 +8,7 @@ import mill.*, scalalib.*, scalajslib.*
 
 object app extends KyoFfiJSModule {
   def scalaVersion = "3.8.4"
-  def scalaJSVersion = "1.21.0"
+  def scalaJSVersion = "1.22.0"
   override def ffiLibraryId = Task { "jsvendored" }
 
   object test extends ScalaJSTests with KyoTestJSModule

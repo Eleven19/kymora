@@ -50,7 +50,7 @@ class WebsiteGeneratorTests extends Test[Any]:
         write(bundleDir.resolve("main.js"), "console.log('kymora')")
         write(bundleDir.resolve("main.js.map"), "{}")
 
-        val content = WebsiteContent.fromRepo(root, WebsiteVersion("v0.1.0", "0.1.0", latest = true))
+        val content = WebsiteContentLoader.fromRepo(root, WebsiteVersion("v0.1.0", "0.1.0", latest = true))
         WebsiteGenerator.emit(
             Seq(content),
             out,
@@ -171,7 +171,7 @@ class WebsiteGeneratorTests extends Test[Any]:
         writeBrandAssets(root)
         write(root.resolve("kymora/vfs/README.md"), "# kymora-vfs\n")
 
-        val content = WebsiteContent.fromRepo(root, WebsiteVersion("v0.1.0", "0.1.0", latest = true))
+        val content = WebsiteContentLoader.fromRepo(root, WebsiteVersion("v0.1.0", "0.1.0", latest = true))
         val result =
             try
                 WebsiteGenerator.emit(

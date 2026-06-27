@@ -6,7 +6,7 @@ add one Mill plugin dependency, mix traits into normal Mill modules, and run
 ordinary Mill tasks.
 
 ```scala doctest:expect=skipped
-//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+//| - io.eleven19.kymora::kymora-kyo-mill::0.2.0-SNAPSHOT
 
 import io.eleven19.kymora.kyo.mill.compat.*
 import io.eleven19.kymora.kyo.mill.doctest.*
@@ -102,7 +102,7 @@ module traits.
 
 ```scala doctest:expect=skipped
 //| mvnDeps:
-//| - io.eleven19.kymora::kymora-kyo-mill::0.1.0-SNAPSHOT
+//| - io.eleven19.kymora::kymora-kyo-mill::0.2.0-SNAPSHOT
 package build
 
 import io.eleven19.kymora.kyo.mill.ffi.*
