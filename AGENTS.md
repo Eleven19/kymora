@@ -54,6 +54,35 @@ Kyo and Mill especially, use reference source lookup before decompilation,
 generated sources, jar inspection, or ad hoc web searches; checked-out upstream
 code is usually more accurate and easier to correlate with published artifacts.
 
+## Working documents (HTML)
+
+Produce planning, design, spec, RFC, and similar working documents as
+**self-contained HTML**, not Markdown. This adopts the HTML-artifact mechanism
+described in [_The unreasonable effectiveness of HTML_](https://claude.com/blog/using-claude-code-the-unreasonable-effectiveness-of-html):
+a single `.html` file with inline `<style>` and `<script>`, no build step, no
+external assets, no CDN, no web fonts — open it directly in a browser.
+
+- **Design system.** Start from the committed template
+  [`docs/dev-templates/design-system.html`](docs/dev-templates/design-system.html).
+  Copy the whole file and fill it in; do **not** reskin per document or link out
+  to the template. Keep the `:root` palette and type stack. Use the shared
+  component vocabulary — sticky-TOC shell, numbered sections, `.meta` header with
+  a status `.badge`, `.callout` (`warn` / `risk` / `ok`), requirement tables with
+  `.rid` + `MUST` / `SHOULD` / `MAY`, `.decision` cards, inline SVG `figure`
+  diagrams, `.frames` byte layouts, and for plan docs `.task` / `.step`
+  checkboxes with a TOC `.progress` readout. Delete the components a document
+  does not need; do not invent parallel ones.
+- **Scala code.** Fence in `<pre><code class="scala">…</code></pre>`; the
+  highlighter script bundled in the template colors it. Use `class="text"` for
+  non-Scala blocks.
+- **Location and naming.** These are working artifacts, not repository content:
+  write them under `.dev/` (git-excluded), organized by kind —
+  `.dev/specs/`, `.dev/plans/`, `.dev/designs/`. Name files
+  `YYYY-MM-DD-<slug>.html`.
+- **Exemplars.** The Kyo checkout carries reference documents in this system
+  under its own `.dev/` (`.dev/specs/…-design.html`,
+  `.dev/plans/…-phase1.html`) — mirror their structure and depth.
+
 ## Layout
 
 - `build.mill.yaml` — Mill + JVM version (meta-build config).
