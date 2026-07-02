@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REPLACE ME — Document Title</title>
+<!--
+  Kymora working-document design system.
+
+  This is the canonical, self-contained template for planning / design / spec
+  documents produced under .dev/ (see AGENTS.md, "Working documents (HTML)").
+
+  Rules:
+    - Copy this whole file; do NOT link out to it. Every document is one
+      standalone .html file with inline <style> and <script>, no build step,
+      no external assets, no CDN, no fonts to fetch. Open it in a browser.
+    - Keep the :root palette and the type stack. Do not reskin per document.
+    - Use the component vocabulary below (badges, callouts, requirement
+      tables, decision cards, SVG figures, task/step checklists). Delete the
+      components a given document does not need; do not invent parallel ones.
+    - Scala code goes in <pre><code class="scala">...</code></pre>; the bundled
+      highlighter at the bottom tokenizes it. Other languages: class="text".
+-->
+<style>
+  :root {
+    --ink: #1c1e26;
+    --ink-soft: #4b4f5e;
+    --paper: #fbfaf7;
+    --panel: #ffffff;
+    --line: #e4e1d8;
+    --accent: #5b4bd4;
+    --accent-soft: #eceafb;
+    --teal: #0f766e;
+    --amber: #b45309;
+    --red: #b42318;
+    --green: #15803d;
+    --code-bg: #14161f;
+    --code-ink: #d8dbe8;
+    --code-kw: #c792ea;
+    --code-type: #82aaff;
+    --code-str: #c3e88d;
+    --code-com: #697098;
+    --code-num: #f78c6c;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.65;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* layout */
+  .shell { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: 100vh; }
+  nav.toc {
+    position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    border-right: 1px solid var(--line); padding: 28px 20px 60px 24px; background: #f5f3ec;
+  }
+  main { padding: 48px 56px 120px; max-width: 1000px; }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
+    main { padding: 28px 20px 80px; }
+  }
+
+  /* toc */
+  nav.toc .brand { font-family: var(--serif); font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
+  nav.toc .brand small { display:block; font-family: var(--sans); font-weight: 400; color: var(--ink-soft); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; margin-top: 2px;}
+  nav.toc ol { list-style: none; margin: 18px 0 0; padding: 0; font-size: .85rem; }
+  nav.toc li { margin: 0; }
+  nav.toc li a { display: block; padding: 5px 8px; border-radius: 6px; color: var(--ink-soft); }
+  nav.toc li a:hover { background: var(--accent-soft); color: var(--accent); text-decoration: none; }
+  nav.toc li.sub a { padding-left: 22px; font-size: .8rem; }
+  nav.toc .num { color: var(--accent); font-family: var(--mono); font-size: .72rem; margin-right: 6px; }
+  nav.toc .progress { margin-top: 20px; font-size: .74rem; color: var(--ink-soft); border-top: 1px solid var(--line); padding-top: 12px; }
+  nav.toc .progress b { color: var(--accent); }
+
+  /* headings */
+  h1 { font-family: var(--serif); font-size: 2.3rem; line-height: 1.15; margin: 0 0 10px; letter-spacing: -0.01em; }
+  h2 { font-family: var(--serif); font-size: 1.55rem; margin: 64px 0 14px; padding-top: 18px; border-top: 3px solid var(--ink); letter-spacing: -0.01em; }
+  h2 .secno { color: var(--accent); font-family: var(--mono); font-size: 1rem; margin-right: 10px; }
+  h3 { font-size: 1.08rem; margin: 34px 0 8px; }
+  h4 { font-size: .95rem; margin: 24px 0 6px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: 10px 0; max-width: 78ch; }
+  ul, ol { max-width: 78ch; }
+  li { margin: 4px 0; }
+
+  /* meta header */
+  .meta { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 18px 0 6px; font-size: .84rem; color: var(--ink-soft); }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .rule { height: 3px; background: var(--ink); margin: 22px 0 0; }
+
+  /* badges */
+  .badge { display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+           padding: 2px 9px; border-radius: 999px; vertical-align: 2px; }
+  /* status / spec badges */
+  .badge.draft   { background: #fef3c7; color: var(--amber); }
+  .badge.full    { background: #dcfce7; color: var(--green); }
+  .badge.sketch  { background: #e0f2fe; color: #0369a1; }
+  .badge.defer   { background: #f1f0ee; color: var(--ink-soft); }
+  .badge.core    { background: var(--accent-soft); color: var(--accent); }
+  .badge.newmod  { background: #ccfbf1; color: var(--teal); }
+  /* plan badges */
+  .badge.plan    { background: #fef3c7; color: var(--amber); }
+  .badge.create  { background: #dcfce7; color: var(--green); }
+  .badge.modify  { background: #e0f2fe; color: #0369a1; }
+  .badge.verify  { background: var(--accent-soft); color: var(--accent); }
+
+  /* callouts */
+  .callout { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--panel);
+             border-radius: 8px; padding: 12px 18px; margin: 18px 0; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--amber); }
+  .callout.risk { border-left-color: var(--red); }
+  .callout.ok   { border-left-color: var(--green); }
+  .callout .tag { font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+
+  /* code */
+  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 18px 20px;
+        overflow-x: auto; font-family: var(--mono); font-size: .82rem; line-height: 1.55; margin: 14px 0; }
+  pre code { font-family: inherit; background: none; padding: 0; }
+  code { font-family: var(--mono); font-size: .85em; background: #efede6; padding: 1px 5px; border-radius: 4px; }
+  .kw  { color: var(--code-kw); }
+  .ty  { color: var(--code-type); }
+  .str { color: var(--code-str); }
+  .com { color: var(--code-com); font-style: italic; }
+  .num2{ color: var(--code-num); }
+  .caption { font-size: .78rem; color: var(--ink-soft); margin: -6px 0 18px 4px; }
+
+  /* tables */
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: .86rem; background: var(--panel);
+          border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th { background: #f1efe7; text-align: left; padding: 8px 12px; font-size: .74rem; text-transform: uppercase;
+       letter-spacing: .06em; color: var(--ink-soft); border-bottom: 1px solid var(--line); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  .rid { font-family: var(--mono); font-size: .74rem; color: var(--accent); white-space: nowrap; }
+  .must { color: var(--red); font-weight: 700; font-size: .72rem; }
+  .should { color: var(--amber); font-weight: 700; font-size: .72rem; }
+  .may { color: var(--ink-soft); font-weight: 700; font-size: .72rem; }
+
+  /* decision cards */
+  .decision { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin: 14px 0; padding: 14px 18px; }
+  .decision .d-head { display: flex; gap: 10px; align-items: baseline; }
+  .decision .d-id { font-family: var(--mono); font-size: .74rem; color: var(--accent); }
+  .decision .d-title { font-weight: 650; }
+  .decision .d-body { font-size: .88rem; color: var(--ink-soft); margin-top: 6px; }
+  .decision .d-body b { color: var(--ink); }
+
+  /* svg diagrams */
+  figure { margin: 22px 0; }
+  figure svg { max-width: 100%; height: auto; display: block; background: var(--panel);
+               border: 1px solid var(--line); border-radius: 10px; }
+  figcaption { font-size: .78rem; color: var(--ink-soft); margin-top: 8px; }
+
+  /* byte/frame layout diagram */
+  .frames { display: flex; flex-wrap: wrap; gap: 0; margin: 14px 0; font-family: var(--mono); font-size: .74rem; }
+  .frames .f { border: 1px solid var(--line); border-right: none; padding: 8px 10px; background: var(--panel); text-align: center; }
+  .frames .f:last-child { border-right: 1px solid var(--line); }
+  .frames .f small { display: block; color: var(--ink-soft); margin-top: 3px; font-size: .66rem; }
+  .frames .f.hl { background: var(--accent-soft); }
+
+  /* plan: task + steps */
+  .task { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin: 22px 0; padding: 4px 22px 18px; }
+  .files { font-size: .84rem; background: #f5f3ec; border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
+  .files code { background: #eae7dd; }
+  .step { display: flex; gap: 12px; margin: 20px 0 6px; align-items: baseline; }
+  .step input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--accent); flex: none; transform: translateY(2px); }
+  .step .s-title { font-weight: 650; }
+  .step-body { margin-left: 29px; }
+  .expected { font-size: .84rem; color: var(--ink-soft); margin: 6px 0 0; }
+  .expected b { color: var(--ink); }
+  .done-strike:has(input:checked) .s-title { color: var(--ink-soft); text-decoration: line-through; }
+
+  .toc-top { font-size: .78rem; margin-top: 26px; }
+  hr.soft { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<nav class="toc">
+  <div class="brand">REPLACE ME<small>Spec / Design / Plan</small></div>
+  <ol>
+    <li><a href="#summary"><span class="num">1</span>Summary</a></li>
+    <li><a href="#goals"><span class="num">2</span>Goals and Non-Goals</a></li>
+    <li><a href="#architecture"><span class="num">3</span>Architecture</a></li>
+    <li class="sub"><a href="#arch-sub">3.1 A sub-section</a></li>
+    <li><a href="#decisions"><span class="num">4</span>Decision Log</a></li>
+    <li><a href="#requirements"><span class="num">5</span>Requirements</a></li>
+    <li><a href="#plan"><span class="num">6</span>Plan (if a plan doc)</a></li>
+    <li><a href="#open"><span class="num">7</span>Open Questions</a></li>
+    <li><a href="#provenance"><span class="num">8</span>Provenance</a></li>
+  </ol>
+  <!-- plan docs: a progress readout in the TOC footer -->
+  <div class="progress">Progress <b>0 / N</b> steps done</div>
+</nav>
+
+<main>
+
+<h1>REPLACE ME — Document Title</h1>
+<p style="font-size:1.05rem; color:var(--ink-soft); max-width:78ch;">
+One-sentence framing of what this document is and the decision it drives.
+</p>
+
+<div class="meta">
+  <span><b>Status</b> <span class="badge draft">Draft for review</span></span>
+  <span><b>Date</b> YYYY-MM-DD</span>
+  <span><b>Driver</b> Name</span>
+  <span><b>Module</b> <code>kymora-...</code></span>
+  <span><b>Related</b> <a href="#">issue / PR</a></span>
+</div>
+<div class="rule"></div>
+
+<!-- ================================================================ -->
+<h2 id="summary"><span class="secno">1</span>Summary</h2>
+<p>What, why now, who consumes it. Keep it to a few paragraphs.</p>
+
+<!-- ================================================================ -->
+<h2 id="goals"><span class="secno">2</span>Goals and Non-Goals</h2>
+<h3>Goals</h3>
+<ul>
+  <li>Goal one.</li>
+</ul>
+<h3>Non-Goals</h3>
+<ul>
+  <li>Explicitly out of scope, so it is not relitigated silently.</li>
+</ul>
+
+<!-- ================================================================ -->
+<h2 id="architecture"><span class="secno">3</span>Architecture</h2>
+
+<figure>
+<svg viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace, Menlo, monospace" font-size="13">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a8fa3"/>
+    </marker>
+  </defs>
+  <rect x="60" y="80" width="180" height="60" rx="10" fill="#eceafb" stroke="#5b4bd4" stroke-width="2"/>
+  <text x="150" y="115" text-anchor="middle" fill="#1c1e26">Component A</text>
+  <rect x="360" y="80" width="180" height="60" rx="10" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+  <text x="450" y="115" text-anchor="middle" fill="#1c1e26">Component B</text>
+  <line x1="240" y1="110" x2="358" y2="110" stroke="#8a8fa3" marker-end="url(#arr)"/>
+</svg>
+<figcaption>Fig 1. Inline SVG diagrams only — no image files, no external renderers.</figcaption>
+</figure>
+
+<h3 id="arch-sub">3.1 A sub-section</h3>
+<pre><code class="scala">// Scala fenced with class="scala"; the bundled highlighter colors it.
+opaque type StreamId = String
+object StreamId:
+    def apply(value: String): Result[Error, StreamId] =
+        if value.isEmpty then Result.fail(Error("empty")) else Result.succeed(value)</code></pre>
+
+<div class="callout">
+  <span class="tag">Design note</span>
+  <p>Use callouts for the one thing a reader must not miss. Variants:
+  <code>callout warn</code>, <code>callout risk</code>, <code>callout ok</code>.</p>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="decisions"><span class="secno">4</span>Decision Log</h2>
+<p>Record each fork so future work does not relitigate it silently.</p>
+<div class="decision">
+  <div class="d-head"><span class="d-id">D1</span><span class="d-title">The decision, stated as a choice</span></div>
+  <div class="d-body"><b>Chosen:</b> what. <b>Why:</b> the reason. <b>Rejected:</b> the alternatives and why not.</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="requirements"><span class="secno">5</span>Requirements</h2>
+<table>
+  <tr><th>Id</th><th>Level</th><th>Requirement</th></tr>
+  <tr><td class="rid">R-1</td><td class="must">MUST</td><td>A normative, testable requirement.</td></tr>
+  <tr><td class="rid">R-2</td><td class="should">SHOULD</td><td>A strong recommendation.</td></tr>
+  <tr><td class="rid">R-3</td><td class="may">MAY</td><td>An option.</td></tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="plan"><span class="secno">6</span>Plan <span class="badge plan">plan</span></h2>
+<p>Plan documents use task cards with checkable steps. Delete this section in a pure spec/design doc.</p>
+<div class="task">
+  <h3>Task 1 — short imperative title <span class="badge create">create</span></h3>
+  <div class="files">Files: <code>kymora/&lt;module&gt;/src/.../Foo.scala</code></div>
+  <div class="step done-strike">
+    <input type="checkbox">
+    <div><span class="s-title">Step title</span></div>
+  </div>
+  <div class="step-body">
+    <p>What to do.</p>
+    <p class="expected"><b>Expected:</b> the concrete, observable result that proves the step is done.</p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="open"><span class="secno">7</span>Open Questions</h2>
+<table>
+  <tr><th>Id</th><th>Question</th><th>Leaning</th><th>Decide by</th></tr>
+  <tr><td class="rid">OQ-1</td><td>An unresolved fork.</td><td>Current lean.</td><td>When it must be settled.</td></tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="provenance"><span class="secno">8</span>Provenance</h2>
+<ul>
+  <li>Sources this document ports from or depends on, with links.</li>
+  <li>This document lives in <code>.dev/</code> (git-excluded): a working artifact, not repository content.</li>
+</ul>
+
+<p class="toc-top"><a href="#summary">Back to top</a></p>
+
+</main>
+</div>
+
+<script>
+// Minimal Scala highlighter: tokenizes textContent, rebuilds with token spans.
+(function () {
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function highlight(src) {
+    var out = '', re = /(\/\/[^\n]*)|("""[\s\S]*?"""|"(?:\\.|[^"\\\n])*")|\b(abstract|case|catch|class|def|derives|do|else|end|enum|extends|extension|final|for|given|if|implicit|import|infix|inline|lazy|match|new|object|opaque|override|package|private|protected|return|sealed|then|throw|trait|try|type|using|val|var|while|with|yield)\b|\b([A-Z][A-Za-z0-9_]*)\b|\b(\d[\d_.]*[LlFfDd]?)\b/g;
+    var last = 0, m;
+    while ((m = re.exec(src)) !== null) {
+      out += esc(src.slice(last, m.index));
+      if (m[1]) out += '<span class="com">' + esc(m[1]) + '</span>';
+      else if (m[2]) out += '<span class="str">' + esc(m[2]) + '</span>';
+      else if (m[3]) out += '<span class="kw">' + esc(m[3]) + '</span>';
+      else if (m[4]) out += '<span class="ty">' + esc(m[4]) + '</span>';
+      else if (m[5]) out += '<span class="num2">' + esc(m[5]) + '</span>';
+      last = re.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+  document.querySelectorAll('pre code.scala').forEach(function (el) {
+    el.innerHTML = highlight(el.textContent);
+  });
+})();
+</script>
+</body>
+</html>
